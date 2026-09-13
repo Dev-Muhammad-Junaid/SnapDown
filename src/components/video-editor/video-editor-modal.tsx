@@ -458,15 +458,15 @@ export function VideoEditorModal({
      */
     const [exportOpen, setExportOpen] = useState(false);
     /**
-     * Lets the floating subtitle panel be dismissed without turning subtitles
-     * off.
+     * Whether the floating subtitle style panel is open.
      *
-     * Stores WHICH state it was dismissed for rather than a plain boolean, so
-     * the dismissal lapses on its own when the thing that summons the panel
-     * happens again — switching mode, or re-enabling subtitles. Derived rather
-     * than reset from an effect, which would be a render just to undo a flag.
+     * It opens only when asked. An earlier version summoned itself whenever
+     * subtitles were switched on and could then only be dismissed until the
+     * next time something summoned it — so it was never quite the user's to
+     * place. The Style button in the header is now the whole story: it opens
+     * it, and it closes it, as does the panel's own X.
      */
-    const [dismissedFor, setDismissedFor] = useState<string | null>(null);
+    const [stylePanelOpen, setStylePanelOpen] = useState(false);
 
     // Preview volume is separate from export audio on purpose — muting what you
     // hear while editing must not silently mute the file you export.
@@ -485,7 +485,7 @@ export function VideoEditorModal({
 
     // Export submit (trim / crop / burn-subtitles + combinations) lives in a hook;
     // it composes the burn ASS exactly like the preview so they stay 1:1.
-    const { isExporting, includeSubtitles, setIncludeSubtitles, subtitlesExplicitlyEnabled, quality, setQuality, handleApplyExport } = useVideoExport({
+    const { isExporting, includeSubtitles, setIncludeSubtitles, quality, setQuality, handleApplyExport } = useVideoExport({
         video,
         mode,
         trimStart,
@@ -502,8 +502,13 @@ export function VideoEditorModal({
 
     const hasSubtitles = subtitles.length > 0;
 
-    const stylePanelTrigger = `${mode}:${subtitlesExplicitlyEnabled}`;
-    const stylePanelHidden = dismissedFor === stylePanelTrigger;
+    /**
+     * Trim and crop burn the same subtitles the Subtitles tab styles, so the
+     * styling controls are worth having there too — but only when the export
+     * will actually burn them in. Turning subtitles off in the export options
+     * takes the button away with them.
+     */
+    const stylePanelApplies = mode !== "subtitles" && hasSubtitles && includeSubtitles;
 
     // Every export re-encodes now — trims included, so a cut lands exactly
     // where it is placed — which means the quality choice always applies and
@@ -622,6 +627,21 @@ export function VideoEditorModal({
                 </div>
 
                 <div className="flex items-center gap-2 sm:gap-3">
+                    {/* Closing the floating panel used to be one-way until you
+                        switched modes. This is the way back in — and the way
+                        out, so the same control does both. */}
+                    {stylePanelApplies && (
+                        <Button
+                            variant={stylePanelOpen ? "secondary" : "ghost"}
+                            size="sm"
+                            aria-pressed={stylePanelOpen}
+                            title={stylePanelOpen ? "Hide subtitle style" : "Show subtitle style"}
+                            onClick={() => setStylePanelOpen((open) => !open)}
+                        >
+                            <Palette className="w-4 h-4 sm:mr-2" />
+                            <span className="hidden sm:inline">Style</span>
+                        </Button>
+                    )}
                     <Button
                         variant="secondary"
                         size="sm"
@@ -1025,7 +1045,7 @@ export function VideoEditorModal({
 
             {/* Floating style panel for trim/crop modes with "Include Subtitles" on */}
             <AnimatePresence>
-                {mode !== "subtitles" && subtitlesExplicitlyEnabled && hasSubtitles && !stylePanelHidden && (
+                {stylePanelApplies && stylePanelOpen && (
                     <motion.div
                         key="style-panel-float"
                         initial={{ opacity: 0, scale: 0.94 }}
@@ -1038,7 +1058,7 @@ export function VideoEditorModal({
                             <SubtitleStylePanel
                                 config={styleConfig}
                                 onChange={updateStyleConfig}
-                                onClose={() => setDismissedFor(stylePanelTrigger)}
+                                onClose={() => setStylePanelOpen(false)}
                             />
                         </div>
                     </motion.div>

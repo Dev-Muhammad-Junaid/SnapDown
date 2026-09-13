@@ -17,7 +17,7 @@
  * bold/italic, letter-spacing, font-size-scale) are updated.
  */
 
-import React, { useRef, useCallback, useEffect } from "react";
+import React, { useRef, useCallback, useEffect, useState } from "react";
 import {
     motion,
     useMotionValue,
@@ -32,9 +32,53 @@ import type { SubtitleStyleConfig } from "@/lib/ass-builder";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
-const PANEL_W  = 272;
+const PANEL_W  = 272; // default width; the user can drag it wider or narrower
+const PANEL_H  = 460; // default height, clamped to what the window can show
+const MIN_W    = 240; // below this the preset and font grids start to wrap badly
+const MAX_W    = 520;
+const MIN_H    = 200;
 const MARGIN   = 16;
 const HDR_H    = 52; // approximate modal header height
+const MAX_H_INSET = 96; // header + transport bar; mirrors the CSS maxHeight
+
+/**
+ * The panel's size survives closing it, switching modes, and reopening it —
+ * it is a working preference, and having to drag it back out every time would
+ * make resizing not worth doing.
+ */
+const SIZE_KEY = "snapdown.subtitleStylePanel.size";
+
+const clamp = (v: number, lo: number, hi: number) => Math.min(Math.max(v, lo), hi);
+
+/**
+ * The tallest the panel can actually render. This has to match the `maxHeight`
+ * on the element itself — clamp a stored size any harder than CSS does and
+ * reopening the panel silently shrinks it, which reads as the app forgetting
+ * the size you gave it.
+ */
+const maxPanelH = () => Math.max(MIN_H, window.innerHeight - MAX_H_INSET);
+const maxPanelW = () => clamp(window.innerWidth - 2 * MARGIN, MIN_W, MAX_W);
+
+function defaultPanelSize(): { w: number; h: number } {
+    if (typeof window === "undefined") return { w: PANEL_W, h: PANEL_H };
+    return { w: clamp(PANEL_W, MIN_W, maxPanelW()), h: clamp(PANEL_H, MIN_H, maxPanelH()) };
+}
+
+function loadPanelSize(): { w: number; h: number } {
+    const fallback = defaultPanelSize();
+    if (typeof window === "undefined") return fallback;
+    try {
+        const raw = window.localStorage.getItem(SIZE_KEY);
+        if (!raw) return fallback;
+        const parsed = JSON.parse(raw) as { w?: unknown; h?: unknown };
+        if (typeof parsed.w !== "number" || typeof parsed.h !== "number") return fallback;
+        // Clamped on read as well as on write: the stored size may come from a
+        // much larger window than the one we are opening in now.
+        return { w: clamp(parsed.w, MIN_W, maxPanelW()), h: clamp(parsed.h, MIN_H, maxPanelH()) };
+    } catch {
+        return fallback;
+    }
+}
 
 // ── Static data ───────────────────────────────────────────────────────────────
 
@@ -166,12 +210,64 @@ export function SubtitleStylePanel({ config, onChange, embedded = false, onClose
     const panelRef = useRef<HTMLDivElement>(null);
     const dragControls = useDragControls();
 
+    // Mirrored in a ref because the pointermove handler below is registered
+    // once per gesture and would otherwise close over a stale size.
+    // Read the stored size up front rather than in an effect. The panel only
+    // ever mounts inside an already-open editor modal, so there is no server
+    // render for a localStorage read to disagree with.
+    const [size, setSize] = useState<{ w: number; h: number }>(loadPanelSize);
+    const sizeRef = useRef(size);
+    const applySize = useCallback((next: { w: number; h: number }) => {
+        sizeRef.current = next;
+        setSize(next);
+    }, []);
+
     useEffect(() => {
         if (embedded || typeof window === "undefined") return;
-        mx.set(window.innerWidth  - PANEL_W - MARGIN);
-        my.set(window.innerHeight - 420    - MARGIN);
+        mx.set(window.innerWidth  - sizeRef.current.w - MARGIN);
+        my.set(window.innerHeight - sizeRef.current.h - MARGIN - 80);
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [embedded]);
+
+    /**
+     * Drag the bottom-right grip to resize.
+     *
+     * Plain pointer events rather than another Framer drag: this has to run
+     * while the panel's own drag is active on the same element tree, and the
+     * two would fight over pointer capture.
+     */
+    const beginResize = useCallback((event: React.PointerEvent) => {
+        if (embedded) return;
+        event.preventDefault();
+        event.stopPropagation();
+
+        const startX = event.clientX;
+        const startY = event.clientY;
+        const start = { ...sizeRef.current };
+        const originX = mx.get();
+        const originY = my.get();
+
+        const onMove = (e: PointerEvent) => {
+            applySize({
+                // The upper bound is the window edge, not MAX_W alone, so the
+                // panel can never be resized out past where it can be seen.
+                w: clamp(start.w + (e.clientX - startX), MIN_W, Math.max(MIN_W, Math.min(MAX_W, window.innerWidth - originX - MARGIN))),
+                h: clamp(start.h + (e.clientY - startY), MIN_H, Math.min(maxPanelH(), Math.max(MIN_H, window.innerHeight - originY - MARGIN))),
+            });
+        };
+        const onUp = () => {
+            window.removeEventListener("pointermove", onMove);
+            window.removeEventListener("pointerup", onUp);
+            window.removeEventListener("pointercancel", onUp);
+            try {
+                window.localStorage.setItem(SIZE_KEY, JSON.stringify(sizeRef.current));
+            } catch { /* private mode, or storage full — the size just won't persist */ }
+        };
+
+        window.addEventListener("pointermove", onMove);
+        window.addEventListener("pointerup", onUp);
+        window.addEventListener("pointercancel", onUp);
+    }, [embedded, mx, my, applySize]);
 
     const handleDragEnd = useCallback(() => {
         if (embedded) return;
@@ -183,7 +279,7 @@ export function SubtitleStylePanel({ config, onChange, embedded = false, onClose
         const vw = window.innerWidth;
         const vh = window.innerHeight;
 
-        const snapX = cx < vw / 2 ? MARGIN : vw - PANEL_W - MARGIN;
+        const snapX = cx < vw / 2 ? MARGIN : vw - rect.width - MARGIN;
         const snapY = cy < vh / 2
             ? HDR_H + MARGIN
             : vh - rect.height - MARGIN - 80;
@@ -199,12 +295,18 @@ export function SubtitleStylePanel({ config, onChange, embedded = false, onClose
             const vh = window.innerHeight;
             const el = panelRef.current;
             const h = el?.offsetHeight ?? 380;
-            mx.set(Math.min(mx.get(), vw - PANEL_W - MARGIN));
-            my.set(Math.min(my.get(), vh - h - MARGIN));
+            // Shrink the panel too, not just its position — a window narrower
+            // than the panel would otherwise leave part of it unreachable.
+            applySize({
+                w: clamp(sizeRef.current.w, MIN_W, maxPanelW()),
+                h: clamp(sizeRef.current.h, MIN_H, maxPanelH()),
+            });
+            mx.set(Math.max(0, Math.min(mx.get(), vw - sizeRef.current.w - MARGIN)));
+            my.set(Math.max(HDR_H, Math.min(my.get(), vh - h - MARGIN)));
         };
         window.addEventListener("resize", onResize);
         return () => window.removeEventListener("resize", onResize);
-    }, [embedded, mx, my]);
+    }, [embedded, mx, my, applySize]);
 
     /**
      * Clicking a preset applies its full visual identity — colours, border
@@ -536,8 +638,9 @@ export function SubtitleStylePanel({ config, onChange, embedded = false, onClose
                 top:  0,
                 x: mx,
                 y: my,
-                width: PANEL_W,
-                maxHeight: "calc(100vh - 140px)",
+                width: size.w,
+                height: size.h,
+                maxHeight: `calc(100vh - ${MAX_H_INSET}px)`,
                 zIndex: 200,
                 pointerEvents: "auto",
             }}
@@ -549,7 +652,7 @@ export function SubtitleStylePanel({ config, onChange, embedded = false, onClose
             dragConstraints={{
                 left:   0,
                 top:    HDR_H,
-                right:  typeof window !== "undefined" ? window.innerWidth  - PANEL_W  - 4 : 980,
+                right:  typeof window !== "undefined" ? window.innerWidth  - size.w  - 4 : 980,
                 bottom: typeof window !== "undefined" ? window.innerHeight - 120       : 660,
             }}
             onDragEnd={handleDragEnd}
@@ -580,6 +683,19 @@ export function SubtitleStylePanel({ config, onChange, embedded = false, onClose
                 )}
             </div>
             {panelBody}
+
+            {/* Resize grip. `touch-none` keeps a trackpad or touch drag from
+                scrolling the panel body instead of resizing it. */}
+            <div
+                onPointerDown={beginResize}
+                title="Drag to resize"
+                aria-hidden
+                className="absolute bottom-0 right-0 z-10 size-4 cursor-nwse-resize touch-none"
+            >
+                <svg viewBox="0 0 16 16" className="size-full text-muted-foreground/50">
+                    <path d="M15 6 L6 15 M15 11 L11 15" stroke="currentColor" strokeWidth="1.25" fill="none" strokeLinecap="round" />
+                </svg>
+            </div>
         </motion.div>
     );
 }
