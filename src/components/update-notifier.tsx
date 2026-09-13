@@ -44,13 +44,17 @@ export function UpdateNotifier() {
 
     if (busy || installing) {
         sidebar = (
-            <div className="w-full px-2 py-1 group-data-[collapsible=icon]:px-0" title={
+            <div className="w-full px-2 py-1 group-data-[collapsible=icon]:size-[30px] group-data-[collapsible=icon]:p-0" title={
                 phase === "verifying" ? "Checking the download is genuine"
                     : installing ? "Installing"
                     : `Downloading ${info.latestVersion}`
             }>
-                <div className="flex items-center gap-2 text-[12px] font-medium text-primary">
-                    <Loader2 className="size-3.5 shrink-0 animate-spin" />
+                {/* Collapsed, this is the only thing left, so it has to sit on
+                    the same 30px centred square as the Collapse and Appearance
+                    buttons below it — otherwise the spinner hangs off to the
+                    left of the icon column. */}
+                <div className="flex items-center gap-2 text-[12px] font-medium text-primary group-data-[collapsible=icon]:size-full group-data-[collapsible=icon]:justify-center">
+                    <Loader2 className="size-3.5 shrink-0 animate-spin group-data-[collapsible=icon]:size-[15px]" />
                     <span className="truncate group-data-[collapsible=icon]:hidden">
                         {phase === "verifying" ? "Verifying"
                             : installing ? "Installing"

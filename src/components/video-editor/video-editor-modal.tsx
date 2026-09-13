@@ -1,12 +1,11 @@
 "use client";
 
-import React, { useState, useRef, useEffect, useCallback, useMemo } from "react";
+import React, { useState, useRef, useEffect, useCallback, useMemo, useSyncExternalStore } from "react";
 import { cn } from "@/lib/utils";
 import { formatClock as formatTime } from "@/lib/time";
 import { useModalChrome } from "@/hooks/use-modal-chrome";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { useIsMobile } from "@/hooks/use-mobile";
 import {
     X,
     Play,
@@ -49,6 +48,33 @@ interface VideoEditorModalProps {
     video: Video;
     onClose: () => void;
     onRefreshLibrary?: () => void;
+}
+
+
+/**
+ * True when the editor stacks the subtitle panel UNDER the preview instead of
+ * beside it — that is, below Tailwind's `sm` breakpoint, which is what actually
+ * flips the container to `flex-col`.
+ *
+ * Deliberately not useIsMobile(): its breakpoint is 768px while the container
+ * switches at 640px. In the 128px band between them the panel animated its
+ * HEIGHT while still laid out in a row, so it rendered as a stubby 320px column
+ * with dead space under it.
+ */
+const STACK_QUERY = "(max-width: 639.98px)";
+
+function subscribeStacked(onChange: () => void) {
+    const mql = window.matchMedia(STACK_QUERY);
+    mql.addEventListener("change", onChange);
+    return () => mql.removeEventListener("change", onChange);
+}
+
+function useIsStacked(): boolean {
+    return useSyncExternalStore(
+        subscribeStacked,
+        () => window.matchMedia(STACK_QUERY).matches,
+        () => false, // No window on the server — assume the side-by-side layout.
+    );
 }
 
 export function VideoEditorModal({
@@ -491,7 +517,7 @@ export function VideoEditorModal({
         return p && p.w ? p.w / p.h : 16 / 9;
     }, [aspectRatio]);
 
-    const isMobile = useIsMobile();
+    const isStacked = useIsStacked();
 
     // Tailwind max-w-* in px (16px rem) — animated via Framer Motion so width cap eases with the frame
     const previewMaxWidthPx = useMemo(() => {
@@ -514,6 +540,25 @@ export function VideoEditorModal({
         duration: 0.48,
         ease: [0.22, 1, 0.36, 1] as const,
     };
+
+    /**
+     * Size of the subtitle sidebar, open and closed.
+     *
+     * Both axes are always specified, even the one that isn't animating. Motion
+     * only writes the keys it is given, so the previous version — `width` on one
+     * side of the breakpoint, `height` on the other — left the unused key behind
+     * as a stale inline style. Crossing into the stacked layout kept the panel
+     * pinned at the 320px it had been given as a sidebar instead of spanning the
+     * window, which on a narrow window is roughly half the space it should have.
+     */
+    const subtitlePanelOpen = useMemo(
+        () => ({ width: isStacked ? "100%" : 320, height: isStacked ? "45vh" : "100%", opacity: 1 }),
+        [isStacked],
+    );
+    const subtitlePanelClosed = useMemo(
+        () => ({ width: isStacked ? "100%" : 0, height: isStacked ? 0 : "100%", opacity: 0 }),
+        [isStacked],
+    );
 
     const showCropOverlay = mode === "crop" || (mode === "trim" && aspectRatio !== "original");
 
@@ -717,11 +762,11 @@ export function VideoEditorModal({
                 <AnimatePresence>
                     {mode === "subtitles" && (
                         <motion.div
-                            initial={isMobile ? { height: 0, opacity: 0 } : { width: 0, opacity: 0 }}
-                            animate={isMobile ? { height: "45vh", opacity: 1 } : { width: 320, opacity: 1 }}
-                            exit={isMobile ? { height: 0, opacity: 0 } : { width: 0, opacity: 0 }}
+                            initial={subtitlePanelClosed}
+                            animate={subtitlePanelOpen}
+                            exit={subtitlePanelClosed}
                             transition={{ duration: 0.18 }}
-                            className="flex flex-col overflow-hidden shrink-0 bg-background w-full sm:w-auto border-t sm:border-t-0 sm:border-l border-border"
+                            className="flex flex-col overflow-hidden shrink-0 bg-background border-t sm:border-t-0 sm:border-l border-border"
                         >
                             {/* Tab bar — same pill pattern as the header Trim / Crop / Subtitles tabs */}
                             <div className="px-3 py-2 border-b border-border/60 shrink-0">
