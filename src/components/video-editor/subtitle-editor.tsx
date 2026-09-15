@@ -17,6 +17,7 @@ import {
     Redo2,
     FileText,
     Info,
+    Plus,
 } from "lucide-react";
 import {
     Subtitle,
@@ -31,12 +32,10 @@ import {
     parseVtt,
     findActiveSubtitle,
     findNearestSubtitle,
+    insertCueAfter,
+    MIN_CUE_SECONDS,
 } from "./subtitle-types";
 import { motion, AnimatePresence } from "framer-motion";
-
-/** Shortest cue we will let an edit produce. Small enough to be invisible,
- *  large enough that start and end can never coincide. */
-const MIN_CUE_SECONDS = 0.05;
 
 /**
  * One editable cue time.
@@ -124,6 +123,8 @@ export function SubtitleEditor({
     const [copied, setCopied] = useState(false);
     const [activeId, setActiveId] = useState<number | null>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
+    /** Cue whose text box should take the caret on the next commit. */
+    const pendingFocusRef = useRef<number | null>(null);
     const scrollContainerRef = useRef<HTMLDivElement>(null);
 
     // Stats
@@ -175,6 +176,13 @@ export function SubtitleEditor({
             }
         }
     }, [currentTime, filteredSubtitles, activeId]);
+
+    useEffect(() => {
+        const id = pendingFocusRef.current;
+        if (id === null) return;
+        pendingFocusRef.current = null;
+        document.querySelector<HTMLTextAreaElement>(`#sub-${id} textarea`)?.focus();
+    });
 
     // Keyboard shortcuts
     useEffect(() => {
@@ -259,6 +267,25 @@ export function SubtitleEditor({
             return true;
         },
         [subtitles, onSubtitlesChange]
+    );
+
+    /**
+     * Insert an empty cue after this one and put the caret in it — adding a
+     * line you then have to hunt for would be half a feature.
+     */
+    const handleAddCue = useCallback(
+        (afterId: number) => {
+            const result = insertCueAfter(subtitles, afterId);
+            if (!result) return;
+            onSubtitlesChange(result.subtitles);
+            const newId = result.subtitles[result.newIndex].id;
+            setActiveId(newId);
+            // Focused from an effect rather than here: the row does not exist
+            // in the DOM until React commits, and a requestAnimationFrame can
+            // still land before that commit.
+            pendingFocusRef.current = newId;
+        },
+        [subtitles, onSubtitlesChange],
     );
 
     const handleExportSrt = useCallback(() => {
@@ -607,7 +634,7 @@ export function SubtitleEditor({
                         </p>
                     </div>
                 ) : (
-                    <div className="p-2 space-y-1">
+                    <div className="p-2 space-y-2">
                         {filteredSubtitles.map((subtitle) => {
                             const isActive = subtitle.id === activeId;
                             const isLowConfidence = subtitle.confidence < 0.8;
@@ -621,7 +648,7 @@ export function SubtitleEditor({
                                         onSeek(parseSrtTime(subtitle.start));
                                     }}
                                     className={cn(
-                                        "group rounded-lg p-2.5 cursor-pointer transition-all duration-200 border",
+                                        "group relative rounded-lg p-2.5 cursor-pointer transition-all duration-200 border",
                                         isActive
                                             ? "bg-muted border-border shadow-sm"
                                             : "bg-transparent border-transparent hover:bg-muted/50 hover:border-border/60"
@@ -657,14 +684,28 @@ export function SubtitleEditor({
                                         value={subtitle.text}
                                         onChange={(e) => handleTextChange(subtitle.id, e.target.value)}
                                         onClick={(e) => e.stopPropagation()}
+                                        placeholder="New subtitle…"
                                         rows={Math.max(1, Math.ceil(subtitle.text.length / 45))}
                                         className={cn(
-                                            "w-full bg-transparent text-xs leading-relaxed text-foreground/90 resize-none outline-none rounded px-1.5 py-1 -mx-1.5 transition-all",
+                                            "w-full bg-transparent text-xs leading-relaxed text-foreground/90 resize-none outline-none rounded px-1.5 py-1 -mx-1.5 transition-all placeholder:text-muted-foreground/50",
                                             isActive
                                                 ? "bg-muted/40 focus:bg-muted/60"
                                                 : "hover:bg-muted/30 focus:bg-muted/40"
                                         )}
                                     />
+
+                                    {/* Sits on the block's bottom edge and only
+                                        exists on hover, so the resting list
+                                        gains no height for it. */}
+                                    <button
+                                        type="button"
+                                        title="Add a subtitle after this one"
+                                        aria-label="Add a subtitle after this one"
+                                        onClick={(e) => { e.stopPropagation(); handleAddCue(subtitle.id); }}
+                                        className="absolute left-1/2 -bottom-2.5 z-10 -translate-x-1/2 flex size-5 items-center justify-center rounded-full border border-border bg-background text-muted-foreground opacity-0 shadow-sm transition-all hover:border-primary/40 hover:bg-primary hover:text-primary-foreground group-hover:opacity-100 focus-visible:opacity-100"
+                                    >
+                                        <Plus className="size-3" />
+                                    </button>
                                 </div>
                             );
                         })}

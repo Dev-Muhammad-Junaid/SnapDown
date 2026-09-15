@@ -104,6 +104,82 @@ export function subtitlesToSrt(subtitles: Subtitle[]): string {
         .join("\n");
 }
 
+/** Shortest cue any edit may produce — small enough to be invisible, large
+ *  enough that a start and end can never coincide. */
+export const MIN_CUE_SECONDS = 0.05;
+
+/** How long a newly inserted cue is, when there is room for it. */
+const NEW_CUE_SECONDS = 2;
+
+/** Below this, the gap after a cue isn't worth putting a subtitle in. */
+const USABLE_GAP_SECONDS = 0.4;
+
+/**
+ * Insert an empty cue directly after `afterId`.
+ *
+ * Where the new cue goes is the whole problem. It has to land somewhere valid
+ * without overlapping its neighbours and without shifting the rest of the
+ * track — moving every later cue to make room for one line would be a far
+ * bigger edit than the user asked for.
+ *
+ * So it takes the silence after the cue you clicked, up to two seconds. Real
+ * transcripts have plenty of it (175 gaps over three seconds in a 4.5-hour
+ * file), and that silence is usually exactly where a missed line belongs.
+ * When there is no usable gap the new cue borrows the tail of the cue above
+ * instead — visible, undoable, and still local to the one place you clicked.
+ *
+ * Ids are renumbered because subtitlesToSrt writes `id` as the SRT sequence
+ * number, and SRT sequence numbers are expected to run 1..n in order.
+ */
+export function insertCueAfter(
+    subtitles: Subtitle[],
+    afterId: number,
+): { subtitles: Subtitle[]; newIndex: number } | null {
+    const index = subtitles.findIndex((s) => s.id === afterId);
+    if (index === -1) return null;
+
+    const current = subtitles[index];
+    const next = subtitles[index + 1];
+    const curStart = parseSrtTime(current.start);
+    const curEnd = parseSrtTime(current.end);
+    const gap = (next ? parseSrtTime(next.start) : curEnd + NEW_CUE_SECONDS) - curEnd;
+
+    let start = curEnd;
+    let end: number;
+    let trimmedCurrentEnd: number | null = null;
+
+    if (gap >= USABLE_GAP_SECONDS) {
+        end = curEnd + Math.min(NEW_CUE_SECONDS, gap);
+    } else {
+        const borrow = Math.min(NEW_CUE_SECONDS, Math.max(0, curEnd - curStart - MIN_CUE_SECONDS));
+        trimmedCurrentEnd = curEnd - borrow;
+        start = trimmedCurrentEnd;
+        end = curEnd + Math.max(0, gap);
+    }
+    if (end - start < MIN_CUE_SECONDS) end = start + MIN_CUE_SECONDS;
+
+    const inserted: Subtitle = {
+        id: -1, // replaced by the renumber below
+        start: formatSrtTime(start),
+        end: formatSrtTime(end),
+        text: "",
+        // Authored by hand, so it is not a candidate for the "needs review"
+        // queue the way a low-confidence transcription is.
+        confidence: 1,
+    };
+
+    const out = [...subtitles];
+    if (trimmedCurrentEnd !== null) {
+        out[index] = { ...current, end: formatSrtTime(trimmedCurrentEnd) };
+    }
+    out.splice(index + 1, 0, inserted);
+
+    return {
+        subtitles: out.map((s, i) => ({ ...s, id: i + 1 })),
+        newIndex: index + 1,
+    };
+}
+
 /** Clip subtitles to a time range and shift timestamps so trimStart becomes 0 */
 export function clipAndShiftSubtitles(
     subtitles: Subtitle[],
