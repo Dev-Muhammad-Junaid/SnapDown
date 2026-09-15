@@ -24,7 +24,14 @@ import {
     animate,
     useDragControls,
 } from "framer-motion";
-import { GripVertical, Bold, Italic, X } from "lucide-react";
+import {
+    GripVertical, Bold, Italic, X,
+    Captions, Highlighter, Square, Clapperboard, Type, AlignCenter, Lightbulb,
+    Minus, Sparkles, Zap, ArrowUp, Mic, Flashlight, Waves,
+    type LucideIcon,
+} from "lucide-react";
+import { MiniSlider } from "@/components/ui/mini-slider";
+import { ACCENT_ON, ACCENT_OFF } from "./accent";
 import { cn } from "@/lib/utils";
 import { STYLE_PRESETS } from "./subtitle-types";
 import { BOX_STYLE_PRESETS, getPresetDefaults, createDefaultStyleConfig } from "@/lib/ass-builder";
@@ -96,13 +103,31 @@ const TEXT_COLORS = [
     "#22C55E", "#3B82F6", "#F97316", "#EC4899",
 ];
 
-const ANIMATIONS: Array<{ id: SubtitleStyleConfig["animation"]; icon: string; label: string }> = [
-    { id: "none",     icon: "—",  label: "None"    },
-    { id: "fade",     icon: "✨", label: "Fade"    },
-    { id: "pop",      icon: "💥", label: "Pop"     },
-    { id: "slide-up", icon: "↑",  label: "Slide"   },
-    { id: "karaoke",  icon: "🎤", label: "Karaoke" },
+const ANIMATIONS: Array<{ id: SubtitleStyleConfig["animation"]; Icon: LucideIcon; label: string }> = [
+    { id: "none",     Icon: Minus,    label: "None"    },
+    { id: "fade",     Icon: Sparkles, label: "Fade"    },
+    { id: "pop",      Icon: Zap,      label: "Pop"     },
+    { id: "slide-up", Icon: ArrowUp,  label: "Slide"   },
+    { id: "karaoke",  Icon: Mic,      label: "Karaoke" },
 ];
+
+/**
+ * Line icons for the presets, replacing the emoji the list used to carry.
+ *
+ * Emoji are drawn by the OS, so they ignore the theme, ignore the accent, and
+ * land at a different weight and baseline from every other glyph in the panel.
+ * Keyed here rather than on the preset itself so the shared preset data stays
+ * free of anything that only the panel cares about.
+ */
+const PRESET_ICONS: Record<string, LucideIcon> = {
+    classic:       Captions,
+    tiktok:        Highlighter,
+    box:           Square,
+    cinematic:     Clapperboard,
+    outline:       Type,
+    "bold-center": AlignCenter,
+    reveal:        Lightbulb,
+};
 
 const POSITION_GRID: Array<{
     v: SubtitleStyleConfig["positionV"];
@@ -141,7 +166,8 @@ function Section({ title, children }: { title: string; children: React.ReactNode
     );
 }
 
-/** Labelled slider row — 11px label, primary-accented track, monospaced value. */
+/** Labelled slider row — compact track in the same language as the export
+ *  quality slider, with the value alongside rather than under it. */
 function SliderRow({
     label, value, min, max, step = 1, onChange, decimals = 0,
 }: {
@@ -150,16 +176,88 @@ function SliderRow({
 }) {
     return (
         <div className="flex items-center gap-2 py-0.5">
-            <span className="text-[10px] text-muted-foreground w-[68px] shrink-0">{label}</span>
-            <input
-                type="range" min={min} max={max} step={step} value={value}
-                onChange={e => onChange(parseFloat(e.target.value))}
-                className="flex-1 h-1 accent-primary cursor-pointer"
+            <span className="text-[10px] text-muted-foreground w-[52px] shrink-0">{label}</span>
+            <MiniSlider
+                value={value} min={min} max={max} step={step}
+                onValueChange={onChange}
+                aria-label={label}
+                className="flex-1"
             />
             <span className="text-[10px] text-muted-foreground font-mono w-8 text-right tabular-nums">
                 {value.toFixed(decimals)}
             </span>
         </div>
+    );
+}
+
+/**
+ * A horizontally scrolling row of chips.
+ *
+ * These lists were 3- and 5-column grids of tall cells with the icon stacked
+ * above its label, which cost most of the panel's height for three sections
+ * that are really just "pick one". Laid out along a row instead, each option is
+ * one line tall, the row scrolls rather than wrapping, and the height it gives
+ * back is where a preset preview can live later.
+ */
+function ChipRow({ children }: { children: React.ReactNode }) {
+    const ref = useRef<HTMLDivElement>(null);
+
+    // Fades the right edge while there is more row to scroll to. macOS hides
+    // overlay scrollbars until you actually scroll, so without this a cut-off
+    // chip just looks like a clipped layout rather than an invitation.
+    //
+    // Written straight to the DOM rather than through state: this runs on every
+    // scroll frame, and a re-render per frame to move a gradient is not a trade
+    // worth making.
+    useEffect(() => {
+        const el = ref.current;
+        if (!el) return;
+        const update = () => {
+            const overflows = el.scrollWidth > el.clientWidth + 1;
+            const atEnd = el.scrollLeft + el.clientWidth >= el.scrollWidth - 1;
+            el.dataset.more = overflows && !atEnd ? "true" : "false";
+        };
+        update();
+        el.addEventListener("scroll", update, { passive: true });
+        const ro = new ResizeObserver(update);
+        ro.observe(el);
+        return () => {
+            el.removeEventListener("scroll", update);
+            ro.disconnect();
+        };
+    }, []);
+
+    return (
+        <div
+            ref={ref}
+            data-more="false"
+            className={cn(
+                "-mx-0.5 flex gap-1 overflow-x-auto px-0.5 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden",
+                "data-[more=true]:[mask-image:linear-gradient(to_right,black_calc(100%-24px),transparent)]",
+            )}
+        >
+            {children}
+        </div>
+    );
+}
+
+/** One option in a ChipRow. `shrink-0` is what makes the row scroll instead of
+ *  squeezing every chip until its label is unreadable. */
+function Chip({
+    active, onClick, title, children,
+}: { active: boolean; onClick: () => void; title?: string; children: React.ReactNode }) {
+    return (
+        <button
+            type="button"
+            onClick={onClick}
+            title={title}
+            className={cn(
+                "flex shrink-0 items-center gap-1.5 rounded-md border px-2 py-1 text-[10px] font-medium transition-all",
+                active ? ACCENT_ON : cn("border-border bg-muted/40", ACCENT_OFF),
+            )}
+        >
+            {children}
+        </button>
     );
 }
 
@@ -340,64 +438,42 @@ export function SubtitleStylePanel({ config, onChange, embedded = false, onClose
 
             {/* ── Presets ── */}
             <Section title="Preset">
-                <div className="grid grid-cols-3 gap-1">
+                <ChipRow>
                     {STYLE_PRESETS.map(p => {
-                        const active = config.preset === p.id;
+                        const Icon = PRESET_ICONS[p.id] ?? Captions;
                         return (
-                            <button
+                            <Chip
                                 key={p.id}
+                                active={config.preset === p.id}
                                 onClick={() => handlePresetClick(p.id)}
-                                className={cn(
-                                    "flex flex-col items-center gap-0.5 px-1 py-1.5 rounded-md border text-[10px] font-medium transition-all",
-                                    active
-                                        ? "bg-primary text-primary-foreground border-primary shadow-sm"
-                                        : "border-border bg-muted/40 text-muted-foreground hover:bg-muted hover:text-foreground"
-                                )}
+                                title={p.desc}
                             >
-                                <span className="text-sm leading-none">{p.icon}</span>
-                                <span className="truncate w-full text-center">{p.name}</span>
-                            </button>
+                                <Icon className="size-3 shrink-0" />
+                                {p.name}
+                            </Chip>
                         );
                     })}
-                </div>
+                </ChipRow>
             </Section>
 
             {/* ── Font (grid with previews) ── */}
             <Section title="Font">
-                <div className="grid grid-cols-3 gap-1">
-                    {FONT_OPTIONS.map(f => {
-                        const active = config.fontFamily === f.id;
-                        return (
-                            <button
-                                key={f.id}
-                                onClick={() => onChange({ fontFamily: f.id })}
-                                title={f.id}
-                                className={cn(
-                                    "flex flex-col items-center justify-center gap-0 px-1 py-1.5 rounded-md border transition-all min-h-[42px]",
-                                    active
-                                        ? "bg-primary text-primary-foreground border-primary shadow-sm"
-                                        : "border-border bg-muted/40 text-foreground hover:bg-muted"
-                                )}
-                            >
-                                <span
-                                    style={{ fontFamily: f.id }}
-                                    className="text-[15px] leading-tight font-medium"
-                                >
-                                    Aa
-                                </span>
-                                <span
-                                    style={{ fontFamily: f.id }}
-                                    className={cn(
-                                        "text-[9px] truncate w-full text-center leading-tight",
-                                        active ? "text-primary-foreground/80" : "text-muted-foreground",
-                                    )}
-                                >
-                                    {f.label}
-                                </span>
-                            </button>
-                        );
-                    })}
-                </div>
+                <ChipRow>
+                    {FONT_OPTIONS.map(f => (
+                        <Chip
+                            key={f.id}
+                            active={config.fontFamily === f.id}
+                            onClick={() => onChange({ fontFamily: f.id })}
+                            title={f.id}
+                        >
+                            {/* The specimen stays set in the font itself — it is
+                                the only part of the chip that says what you are
+                                choosing. */}
+                            <span style={{ fontFamily: f.id }} className="text-[13px] leading-none">Aa</span>
+                            <span style={{ fontFamily: f.id }}>{f.label}</span>
+                        </Chip>
+                    ))}
+                </ChipRow>
             </Section>
 
             {/* ── Reveal Options (only when Reveal preset is active) ── */}
@@ -408,18 +484,16 @@ export function SubtitleStylePanel({ config, onChange, embedded = false, onClose
                             onClick={() => onChange({ revealFadeInactive: !config.revealFadeInactive })}
                             className={cn(
                                 "flex items-center justify-between gap-2 px-2 py-1.5 rounded-md border text-[10px] font-medium transition-all",
-                                config.revealFadeInactive
-                                    ? "bg-primary text-primary-foreground border-primary shadow-sm"
-                                    : "border-border bg-muted/40 text-foreground hover:bg-muted"
+                                config.revealFadeInactive ? ACCENT_ON : "border-border bg-muted/40 text-foreground hover:bg-muted"
                             )}
                         >
                             <span className="flex items-center gap-1.5">
-                                <span className="leading-none">🔦</span>
+                                <Flashlight className="size-3 shrink-0" />
                                 Fade inactive words
                             </span>
                             <span className={cn(
                                 "text-[9px] px-1.5 py-0.5 rounded",
-                                config.revealFadeInactive ? "bg-primary-foreground/20" : "bg-muted",
+                                config.revealFadeInactive ? "bg-background/20" : "bg-muted",
                             )}>
                                 {config.revealFadeInactive ? "ON" : "OFF"}
                             </span>
@@ -428,18 +502,16 @@ export function SubtitleStylePanel({ config, onChange, embedded = false, onClose
                             onClick={() => onChange({ revealWordEntrance: !config.revealWordEntrance })}
                             className={cn(
                                 "flex items-center justify-between gap-2 px-2 py-1.5 rounded-md border text-[10px] font-medium transition-all",
-                                config.revealWordEntrance
-                                    ? "bg-primary text-primary-foreground border-primary shadow-sm"
-                                    : "border-border bg-muted/40 text-foreground hover:bg-muted"
+                                config.revealWordEntrance ? ACCENT_ON : "border-border bg-muted/40 text-foreground hover:bg-muted"
                             )}
                         >
                             <span className="flex items-center gap-1.5">
-                                <span className="leading-none">🌊</span>
+                                <Waves className="size-3 shrink-0" />
                                 Word-by-word entrance
                             </span>
                             <span className={cn(
                                 "text-[9px] px-1.5 py-0.5 rounded",
-                                config.revealWordEntrance ? "bg-primary-foreground/20" : "bg-muted",
+                                config.revealWordEntrance ? "bg-background/20" : "bg-muted",
                             )}>
                                 {config.revealWordEntrance ? "ON" : "OFF"}
                             </span>
@@ -453,33 +525,25 @@ export function SubtitleStylePanel({ config, onChange, embedded = false, onClose
 
             {/* ── Animation ── */}
             <Section title="Animation">
-                <div className="grid grid-cols-5 gap-1">
-                    {ANIMATIONS.map(a => {
-                        const active = config.animation === a.id;
-                        return (
-                            <button
-                                key={a.id}
-                                onClick={() => onChange({ animation: a.id })}
-                                title={a.label}
-                                className={cn(
-                                    "flex flex-col items-center gap-0.5 py-1.5 rounded-md border text-[9px] font-medium transition-all",
-                                    active
-                                        ? "bg-primary text-primary-foreground border-primary shadow-sm"
-                                        : "border-border bg-muted/40 text-muted-foreground hover:bg-muted hover:text-foreground"
-                                )}
-                            >
-                                <span className="leading-none text-sm">{a.icon}</span>
-                                <span className="truncate w-full text-center">{a.label}</span>
-                            </button>
-                        );
-                    })}
-                </div>
+                <ChipRow>
+                    {ANIMATIONS.map(({ id, Icon, label }) => (
+                        <Chip
+                            key={id}
+                            active={config.animation === id}
+                            onClick={() => onChange({ animation: id })}
+                            title={label}
+                        >
+                            <Icon className="size-3 shrink-0" />
+                            {label}
+                        </Chip>
+                    ))}
+                </ChipRow>
             </Section>
 
             {/* ── Position (3×3 grid) + Style (B / I) ── */}
             <Section title="Position & Style">
-                <div className="flex items-start gap-3">
-                    <div className="grid grid-cols-3 gap-0.5 shrink-0">
+                <div className="flex items-center gap-3">
+                    <div className="grid shrink-0 grid-cols-3 gap-0.5">
                         {POSITION_GRID.map(cell => {
                             const active = config.positionV === cell.v && config.positionH === cell.h;
                             return (
@@ -488,43 +552,40 @@ export function SubtitleStylePanel({ config, onChange, embedded = false, onClose
                                     onClick={() => onChange({ positionV: cell.v, positionH: cell.h })}
                                     title={cell.label}
                                     className={cn(
-                                        "w-6 h-6 rounded border transition-all flex items-center justify-center",
-                                        active
-                                            ? "bg-primary border-primary shadow-sm"
-                                            : "border-border bg-muted/40 hover:bg-muted"
+                                        "flex size-[18px] items-center justify-center rounded-[4px] border transition-all",
+                                        active ? ACCENT_ON : "border-border bg-muted/40 hover:bg-muted",
                                     )}
                                 >
                                     <div className={cn(
-                                        "w-1.5 h-1.5 rounded-full",
-                                        active ? "bg-primary-foreground" : "bg-muted-foreground/50"
+                                        "size-1 rounded-full",
+                                        active ? "bg-background" : "bg-muted-foreground/50",
                                     )} />
                                 </button>
                             );
                         })}
                     </div>
-                    <div className="flex-1 flex flex-col gap-1">
-                        <button
-                            onClick={() => onChange({ bold: !config.bold })}
-                            className={cn(
-                                "flex items-center justify-center gap-1 py-1.5 rounded-md border text-[10px] font-bold transition-all",
-                                config.bold
-                                    ? "bg-primary text-primary-foreground border-primary shadow-sm"
-                                    : "border-border bg-muted/40 text-muted-foreground hover:bg-muted hover:text-foreground"
-                            )}
-                        >
-                            <Bold className="w-3 h-3" /> Bold
-                        </button>
-                        <button
-                            onClick={() => onChange({ italic: !config.italic })}
-                            className={cn(
-                                "flex items-center justify-center gap-1 py-1.5 rounded-md border text-[10px] font-medium italic transition-all",
-                                config.italic
-                                    ? "bg-primary text-primary-foreground border-primary shadow-sm"
-                                    : "border-border bg-muted/40 text-muted-foreground hover:bg-muted hover:text-foreground"
-                            )}
-                        >
-                            <Italic className="w-3 h-3" /> Italic
-                        </button>
+                    {/* B and I are universally legible on their own, so they take
+                        an icon button's worth of room rather than a full-width
+                        labelled row each. */}
+                    <div className="flex gap-1">
+                        {([
+                            { on: config.bold,   Icon: Bold,   label: "Bold",   apply: () => onChange({ bold: !config.bold }) },
+                            { on: config.italic, Icon: Italic, label: "Italic", apply: () => onChange({ italic: !config.italic }) },
+                        ] as const).map(({ on, Icon, label, apply }) => (
+                            <button
+                                key={label}
+                                onClick={apply}
+                                title={label}
+                                aria-label={label}
+                                aria-pressed={on}
+                                className={cn(
+                                    "flex size-[26px] items-center justify-center rounded-md border transition-all",
+                                    on ? ACCENT_ON : cn("border-border bg-muted/40", ACCENT_OFF),
+                                )}
+                            >
+                                <Icon className="size-3.5" />
+                            </button>
+                        ))}
                     </div>
                 </div>
             </Section>
@@ -545,7 +606,7 @@ export function SubtitleStylePanel({ config, onChange, embedded = false, onClose
                                 className={cn(
                                     "w-6 h-6 rounded-full border-2 transition-all hover:scale-110 shrink-0",
                                     hex === "#000000" && "ring-1 ring-border",
-                                    active ? "border-primary scale-110 shadow-sm" : "border-transparent",
+                                    active ? "border-foreground scale-110 shadow-sm" : "border-transparent",
                                 )}
                                 style={{ backgroundColor: hex }}
                             />
