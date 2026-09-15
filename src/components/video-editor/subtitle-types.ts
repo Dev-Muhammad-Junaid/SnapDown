@@ -254,7 +254,12 @@ export function findActiveSubtitle(
         subtitles.find((s) => {
             const start = parseSrtTime(s.start);
             const end = parseSrtTime(s.end);
-            return currentTime >= start && currentTime <= end;
+            // End-exclusive. Cues routinely butt up against each other — one
+            // ends at 0:33.000 and the next begins there — and an inclusive end
+            // made the earlier cue win at that instant. Stepping down the list
+            // seeks to the next cue's start, so the selection was dragged
+            // straight back to the cue above and ↓ could never get past it.
+            return currentTime >= start && currentTime < end;
         }) || null
     );
 }

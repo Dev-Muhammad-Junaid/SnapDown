@@ -39,6 +39,7 @@ import {
 } from "./subtitle-types";
 import { motion, AnimatePresence } from "framer-motion";
 import { hintForEvent, FLASH_MS, type HintId } from "./shortcut-hints";
+import { ACCENT_ON, ACCENT_OFF } from "./accent";
 
 /**
  * One editable cue time.
@@ -117,16 +118,35 @@ function useShortcutFlash(): HintId | null {
     return flash;
 }
 
-/** One key cap in the footer, lit while its shortcut is firing. */
-function HintCap({ cap, label, lit }: { cap: string; label: string; lit: boolean }) {
+/**
+ * One key cap in the footer.
+ *
+ * `lit` is the shortcut firing. `spent` means the shortcut exists but has
+ * nothing left to do — undo with an empty history — which is worth showing
+ * distinctly: dark would read as "not a shortcut", and lighting it would claim
+ * something happened.
+ */
+function HintCap({
+    cap,
+    label,
+    lit,
+    spent = false,
+}: { cap: string; label: string; lit: boolean; spent?: boolean }) {
     return (
-        <span className={cn("transition-colors duration-200", lit ? "text-foreground" : "")}>
+        <span
+            className={cn(
+                "transition-opacity duration-200",
+                spent && !lit ? "opacity-40" : "",
+            )}
+        >
             <kbd
                 className={cn(
                     "rounded border px-1 py-0.5 font-mono text-[8px] transition-all duration-150",
                     lit
-                        ? "border-primary bg-primary text-primary-foreground scale-110 shadow-sm shadow-primary/30"
-                        : "border-border/60 bg-muted",
+                        ? cn(ACCENT_ON, "scale-110 shadow-sm")
+                        : spent
+                            ? "border-dashed border-border/60 bg-transparent"
+                            : "border-border/60 bg-muted",
                 )}
             >
                 {cap}
@@ -451,14 +471,12 @@ export function SubtitleEditor({
                             title={`Review queue${needsReviewCount > 0 ? ` (${needsReviewCount})` : ""}`}
                             className={cn(
                                 "relative p-1.5 rounded-md transition-colors",
-                                showReviewQueue
-                                    ? "bg-primary text-primary-foreground"
-                                    : "bg-muted text-muted-foreground hover:bg-muted/80 hover:text-foreground"
+                                showReviewQueue ? ACCENT_ON : cn("bg-muted", ACCENT_OFF)
                             )}
                         >
                             <ListTodo className="w-3.5 h-3.5" />
                             {needsReviewCount > 0 && (
-                                <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[9px] px-1 rounded-full min-w-[14px] text-center leading-[14px] font-medium pointer-events-none">
+                                <span className="pointer-events-none absolute -top-1 -right-1 min-w-[14px] rounded-full bg-destructive px-1 text-center text-[9px] font-medium leading-[14px] text-background">
                                     {needsReviewCount}
                                 </span>
                             )}
@@ -469,7 +487,7 @@ export function SubtitleEditor({
                             type="button"
                             title={`${subtitles.length} subtitles · ${totalWords} words · ${statsMins}m ${String(statsSecs).padStart(2, "0")}s`}
                             aria-label="Transcript info"
-                            className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                            className={cn("p-1.5 rounded-md transition-colors", ACCENT_OFF)}
                         >
                             <Info className="w-3.5 h-3.5" />
                         </button>
@@ -480,7 +498,7 @@ export function SubtitleEditor({
                         <button
                             onClick={onUndo}
                             disabled={!canUndo}
-                            className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                            className={cn("p-1.5 rounded-md transition-colors disabled:cursor-not-allowed disabled:opacity-30", ACCENT_OFF)}
                             title="Undo (⌘Z)"
                         >
                             <Undo2 className="w-3.5 h-3.5" />
@@ -490,7 +508,7 @@ export function SubtitleEditor({
                         <button
                             onClick={onRedo}
                             disabled={!canRedo}
-                            className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                            className={cn("p-1.5 rounded-md transition-colors disabled:cursor-not-allowed disabled:opacity-30", ACCENT_OFF)}
                             title="Redo (⌘Y)"
                         >
                             <Redo2 className="w-3.5 h-3.5" />
@@ -503,9 +521,7 @@ export function SubtitleEditor({
                             onClick={() => setShowTimingOffset(!showTimingOffset)}
                             className={cn(
                                 "p-1.5 rounded-md transition-colors",
-                                showTimingOffset
-                                    ? "bg-muted text-foreground"
-                                    : "text-muted-foreground hover:text-foreground hover:bg-muted"
+                                showTimingOffset ? ACCENT_ON : ACCENT_OFF
                             )}
                             title="Timing offset"
                         >
@@ -517,9 +533,7 @@ export function SubtitleEditor({
                             onClick={() => setShowFindReplace(!showFindReplace)}
                             className={cn(
                                 "p-1.5 rounded-md transition-colors",
-                                showFindReplace
-                                    ? "bg-muted text-foreground"
-                                    : "text-muted-foreground hover:text-foreground hover:bg-muted"
+                                showFindReplace ? ACCENT_ON : ACCENT_OFF
                             )}
                             title="Find & Replace"
                         >
@@ -529,11 +543,11 @@ export function SubtitleEditor({
                         {/* Copy transcript */}
                         <button
                             onClick={handleCopyTranscript}
-                            className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                            className={cn("p-1.5 rounded-md transition-colors", ACCENT_OFF)}
                             title="Copy transcript"
                         >
                             {copied ? (
-                                <Check className="w-3.5 h-3.5 text-green-400" />
+                                <Check className="w-3.5 h-3.5 text-chart-2" />
                             ) : (
                                 <Copy className="w-3.5 h-3.5" />
                             )}
@@ -542,7 +556,7 @@ export function SubtitleEditor({
                         {/* Import SRT / VTT */}
                         <button
                             onClick={() => fileInputRef.current?.click()}
-                            className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                            className={cn("p-1.5 rounded-md transition-colors", ACCENT_OFF)}
                             title="Import SRT or VTT file"
                         >
                             <Upload className="w-3.5 h-3.5" />
@@ -558,7 +572,7 @@ export function SubtitleEditor({
                         {/* Export SRT */}
                         <button
                             onClick={handleExportSrt}
-                            className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                            className={cn("p-1.5 rounded-md transition-colors", ACCENT_OFF)}
                             title="Export as .srt"
                         >
                             <Download className="w-3.5 h-3.5" />
@@ -567,7 +581,7 @@ export function SubtitleEditor({
                         {/* Export VTT */}
                         <button
                             onClick={handleExportVtt}
-                            className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                            className={cn("p-1.5 rounded-md transition-colors", ACCENT_OFF)}
                             title="Export as .vtt"
                         >
                             <FileText className="w-3.5 h-3.5" />
@@ -626,7 +640,7 @@ export function SubtitleEditor({
                                 <button
                                     onClick={() => { if (timingOffsetMs !== 0) shiftAllTimings(-timingOffsetMs); }}
                                     disabled={timingOffsetMs === 0}
-                                    className="px-2 py-0.5 rounded text-[10px] font-mono bg-primary/10 border border-primary/20 text-primary hover:bg-primary/15 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                    className="rounded border border-border bg-muted px-2 py-0.5 font-mono text-[10px] text-foreground transition-colors hover:bg-foreground hover:text-background disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-muted disabled:hover:text-foreground"
                                 >
                                     Reset
                                 </button>
@@ -671,7 +685,7 @@ export function SubtitleEditor({
                                     <button
                                         onClick={handleReplaceAll}
                                         disabled={!findText || findMatchCount === 0}
-                                        className="px-3 py-1 rounded text-xs font-medium bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-30 disabled:cursor-not-allowed transition-all shrink-0"
+                                        className={cn("shrink-0 rounded px-3 py-1 text-xs font-medium transition-all disabled:cursor-not-allowed disabled:opacity-30", ACCENT_ON, "hover:opacity-90")}
                                     >
                                         Replace All
                                     </button>
@@ -796,7 +810,7 @@ export function SubtitleEditor({
                                         title="Add a subtitle after this one"
                                         aria-label="Add a subtitle after this one"
                                         onClick={(e) => { e.stopPropagation(); handleAddCue(subtitle.id); }}
-                                        className="absolute left-1/2 -bottom-2 z-10 -translate-x-1/2 flex size-3.5 items-center justify-center rounded-full border border-border bg-background text-muted-foreground opacity-0 shadow-sm transition-all hover:border-primary/40 hover:bg-primary hover:text-primary-foreground group-hover:opacity-100 focus-visible:opacity-100"
+                                        className="absolute left-1/2 -bottom-2 z-10 -translate-x-1/2 flex size-3.5 items-center justify-center rounded-full border border-border bg-background text-muted-foreground opacity-0 shadow-sm transition-all hover:border-foreground hover:bg-foreground hover:text-background group-hover:opacity-100 focus-visible:opacity-100"
                                     >
                                         <Plus className="size-2.5" />
                                     </button>
@@ -816,7 +830,7 @@ export function SubtitleEditor({
                 <HintCap cap="Space" label="Play" lit={flash === "play"} />
                 <HintCap cap="J" label="-5s" lit={flash === "back"} />
                 <HintCap cap="L" label="+5s" lit={flash === "fwd"} />
-                <HintCap cap="⌘Z" label="Undo" lit={flash === "undo"} />
+                <HintCap cap="⌘Z" label="Undo" lit={flash === "undo"} spent={!canUndo} />
             </div>
         </div>
     );

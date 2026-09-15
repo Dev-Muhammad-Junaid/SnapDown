@@ -2,6 +2,7 @@
 
 import React, { useState, useRef, useEffect, useCallback, useMemo, useSyncExternalStore } from "react";
 import { cn } from "@/lib/utils";
+import { PILL_GROUP, PILL_BASE, PILL_ON, PILL_OFF } from "./accent";
 import { formatClock as formatTime } from "@/lib/time";
 import { useModalChrome } from "@/hooks/use-modal-chrome";
 import { Button } from "@/components/ui/button";
@@ -603,7 +604,7 @@ export function VideoEditorModal({
 
                 {/* Mode Tabs — own full-width row on mobile, absolute-centered on desktop */}
                 <div className="order-last w-full sm:order-none sm:w-auto sm:absolute sm:left-1/2 sm:top-1/2 sm:-translate-x-1/2 sm:-translate-y-1/2 flex justify-center">
-                  <div className="flex items-center gap-1 bg-muted/60 rounded-xl p-1 border border-border/40">
+                  <div className={PILL_GROUP}>
                     {([
                         { id: "trim",      label: "Trim",      Icon: Scissors },
                         { id: "crop",      label: "Crop",      Icon: CropIcon },
@@ -612,12 +613,7 @@ export function VideoEditorModal({
                         <button
                             key={id}
                             onClick={() => setMode(id)}
-                            className={cn(
-                                "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all",
-                                mode === id
-                                    ? "bg-foreground text-background shadow-sm"
-                                    : "text-muted-foreground hover:text-foreground"
-                            )}
+                            className={cn(PILL_BASE, mode === id ? PILL_ON : PILL_OFF)}
                         >
                             <Icon className="w-3.5 h-3.5" />
                             {label}
@@ -790,7 +786,7 @@ export function VideoEditorModal({
                         >
                             {/* Tab bar — same pill pattern as the header Trim / Crop / Subtitles tabs */}
                             <div className="px-3 py-2 border-b border-border/60 shrink-0">
-                                <div className="flex items-center gap-1 bg-muted/60 rounded-xl p-1 border border-border/40">
+                                <div className={PILL_GROUP}>
                                     {([
                                         { id: "style", label: "Style", Icon: Palette  },
                                         { id: "cues",  label: "Cues",  Icon: Captions },
@@ -798,12 +794,7 @@ export function VideoEditorModal({
                                         <button
                                             key={id}
                                             onClick={() => setSidebarTab(id)}
-                                            className={cn(
-                                                "flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all",
-                                                sidebarTab === id
-                                                    ? "bg-foreground text-background shadow-sm"
-                                                    : "text-muted-foreground hover:text-foreground"
-                                            )}
+                                            className={cn(PILL_BASE, "flex-1 justify-center", sidebarTab === id ? PILL_ON : PILL_OFF)}
                                         >
                                             <Icon className="w-3.5 h-3.5" />
                                             {label}

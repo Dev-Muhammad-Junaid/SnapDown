@@ -65,3 +65,36 @@ describe("deleteCue", () => {
         expect(input).toHaveLength(3);
     });
 });
+
+describe("findActiveSubtitle boundaries", () => {
+    // Cues routinely butt up against each other. An inclusive end made the
+    // earlier cue win at the shared instant, so stepping down the list — which
+    // seeks to the next cue's start — was dragged straight back to the cue
+    // above and ↓ could never get past it.
+    const adjacent = [cue(1, 30, 33), cue(2, 33, 37)];
+
+    it("hands the shared boundary to the cue that is starting", async () => {
+        const { findActiveSubtitle } = await import("@/components/video-editor/subtitle-types");
+        expect(findActiveSubtitle(adjacent, 33)!.id).toBe(2);
+    });
+
+    it("keeps the earlier cue right up to that boundary", async () => {
+        const { findActiveSubtitle } = await import("@/components/video-editor/subtitle-types");
+        expect(findActiveSubtitle(adjacent, 32.999)!.id).toBe(1);
+        expect(findActiveSubtitle(adjacent, 30)!.id).toBe(1);
+    });
+
+    it("reports nothing once the last cue has ended", async () => {
+        const { findActiveSubtitle } = await import("@/components/video-editor/subtitle-types");
+        expect(findActiveSubtitle(adjacent, 37)).toBeNull();
+    });
+
+    it("lets every cue in a chain be reachable by stepping to its start", async () => {
+        const { findActiveSubtitle } = await import("@/components/video-editor/subtitle-types");
+        const chain = [cue(1, 0, 2), cue(2, 2, 4), cue(3, 4, 6), cue(4, 6, 8)];
+        for (const c of chain) {
+            const at = parseSrtTime(c.start);
+            expect(findActiveSubtitle(chain, at)!.id, `seeking to cue ${c.id}'s start`).toBe(c.id);
+        }
+    });
+});
