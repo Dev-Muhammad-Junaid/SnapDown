@@ -27,7 +27,7 @@ import {
 import {
     GripVertical, Bold, Italic, X,
     Captions, Highlighter, Square, Clapperboard, Type, AlignCenter, Lightbulb,
-    Minus, Sparkles, Zap, ArrowUp, Mic, Flashlight, Waves,
+    Minus, Sparkles, Zap, ArrowUp, Mic, Flashlight, Waves, Sparkle,
     type LucideIcon,
 } from "lucide-react";
 import { MiniSlider } from "@/components/ui/mini-slider";
@@ -150,6 +150,7 @@ const PRESET_ICONS: Record<string, LucideIcon> = {
     cinematic:     Clapperboard,
     outline:       Type,
     "bold-center": AlignCenter,
+    neon:          Sparkle,
     reveal:        Lightbulb,
 };
 
@@ -285,31 +286,64 @@ function Chip({
     );
 }
 
-/** Compact color picker row — swatch + hex code + hidden native input. */
-function ColorRow({
-    label, value, onChange,
-}: { label: string; value: string; onChange: (v: string) => void }) {
+/**
+ * A row of colour swatches plus a custom picker.
+ *
+ * Every colour in the panel now uses this. Outline, shadow and background used
+ * to be a swatch-and-hex field that opened the OS colour picker for a choice
+ * that is almost always one of eight, while the text colour right above it
+ * offered exactly those eight in one click.
+ */
+function ColorSwatches({
+    value, onChange,
+}: { value: string; onChange: (v: string) => void }) {
     return (
-        <div className="flex items-center gap-2 py-0.5">
-            <span className="text-[10px] text-muted-foreground w-[68px] shrink-0">{label}</span>
-            <label className="flex-1 flex items-center gap-2 cursor-pointer rounded-md border border-border bg-muted/40 hover:bg-muted px-1.5 py-0.5 transition-colors">
-                <span
-                    className="w-3.5 h-3.5 rounded-sm border border-border shrink-0"
-                    style={{ backgroundColor: value }}
-                />
-                <span className="text-[10px] text-foreground font-mono tabular-nums flex-1">
-                    {value.toUpperCase()}
-                </span>
+        <div className="flex flex-wrap items-center gap-1.5">
+            {TEXT_COLORS.map(hex => {
+                const active = value.toUpperCase() === hex.toUpperCase();
+                return (
+                    <button
+                        key={hex}
+                        type="button"
+                        onClick={() => onChange(hex)}
+                        title={hex}
+                        className={cn(
+                            "size-5 shrink-0 rounded-full border-2 transition-all hover:scale-110",
+                            hex === "#000000" && "ring-1 ring-border",
+                            active ? "scale-110 border-foreground shadow-sm" : "border-transparent",
+                        )}
+                        style={{ backgroundColor: hex }}
+                    />
+                );
+            })}
+            <label
+                title={`Custom colour — currently ${value.toUpperCase()}`}
+                className="relative flex size-5 shrink-0 cursor-pointer items-center justify-center overflow-hidden rounded-full border-2 border-dashed border-border transition-all hover:border-foreground/60"
+            >
                 <input
                     type="color"
                     value={value}
                     onChange={e => onChange(e.target.value)}
-                    className="absolute w-0 h-0 opacity-0"
+                    className="absolute inset-0 size-full cursor-pointer opacity-0"
                 />
+                <span className="pointer-events-none text-[10px] text-muted-foreground">+</span>
             </label>
         </div>
     );
 }
+
+/** A labelled colour palette, for the secondary colours under a slider pair. */
+function ColorSwatchRow({
+    label, value, onChange,
+}: { label: string; value: string; onChange: (v: string) => void }) {
+    return (
+        <div className="flex items-center gap-2 py-0.5">
+            <span className="w-[52px] shrink-0 text-[10px] text-muted-foreground">{label}</span>
+            <ColorSwatches value={value} onChange={onChange} />
+        </div>
+    );
+}
+
 
 // ── Props ─────────────────────────────────────────────────────────────────────
 
@@ -444,6 +478,7 @@ export function SubtitleStylePanel({ config, onChange, embedded = false, onClose
     };
 
     const isBoxStyle = BOX_STYLE_PRESETS.has(config.preset);
+    const isNeon = config.preset === "neon";
 
     /** The animation this preset owns, if it owns one. */
     const ownedAnimation = ANIMATIONS.find(a => a.onlyFor === config.preset);
@@ -630,36 +665,10 @@ export function SubtitleStylePanel({ config, onChange, embedded = false, onClose
                 {colorHint && (
                     <p className="text-[9px] text-muted-foreground/70 mb-1.5 leading-snug">{colorHint}</p>
                 )}
-                <div className="flex items-center gap-1.5 flex-wrap">
-                    {TEXT_COLORS.map(hex => {
-                        const active = config.primaryColor.toUpperCase() === hex.toUpperCase();
-                        return (
-                            <button
-                                key={hex}
-                                onClick={() => onChange({ primaryColor: hex })}
-                                title={hex}
-                                className={cn(
-                                    "w-6 h-6 rounded-full border-2 transition-all hover:scale-110 shrink-0",
-                                    hex === "#000000" && "ring-1 ring-border",
-                                    active ? "border-foreground scale-110 shadow-sm" : "border-transparent",
-                                )}
-                                style={{ backgroundColor: hex }}
-                            />
-                        );
-                    })}
-                    <label
-                        title="Custom colour"
-                        className="relative w-6 h-6 rounded-full border-2 border-dashed border-border cursor-pointer flex items-center justify-center hover:border-foreground/60 transition-all overflow-hidden shrink-0"
-                    >
-                        <input
-                            type="color"
-                            value={config.primaryColor}
-                            onChange={e => onChange({ primaryColor: e.target.value })}
-                            className="opacity-0 absolute inset-0 w-full h-full cursor-pointer"
-                        />
-                        <span className="text-[10px] text-muted-foreground pointer-events-none">+</span>
-                    </label>
-                </div>
+                <ColorSwatches
+                    value={config.primaryColor}
+                    onChange={v => onChange({ primaryColor: v })}
+                />
             </Section>
 
             {/* ── Sizing ── */}
@@ -678,21 +687,40 @@ export function SubtitleStylePanel({ config, onChange, embedded = false, onClose
 
             {/* ── Outline & shadow (hidden for box + TikTok, which fix their own) ── */}
             {showOutlineSection && (
-                <Section title="Outline & Shadow">
+                <Section title={isNeon ? "Glow & Shadow" : "Outline & Shadow"}>
                     <SliderRow
-                        label="Outline"
+                        label={isNeon ? "Ring" : "Outline"}
                         value={config.outlineSize} min={0} max={8} step={0.1}
                         onChange={v => onChange({ outlineSize: v })} decimals={1}
                     />
+                    {/* Neon's glow IS its blurred stroke, so the blur radius is
+                        the knob that makes or breaks the look. Every other
+                        preset either wants no blur or has one baked in, which
+                        is why this is the one place it is exposed. */}
+                    {isNeon && (
+                        <SliderRow
+                            label="Glow"
+                            value={config.blur ?? 0} min={0} max={12} step={0.1}
+                            onChange={v => onChange({ blur: v })} decimals={1}
+                        />
+                    )}
                     <SliderRow
                         label="Shadow"
                         value={config.shadowSize} min={0} max={10} step={0.1}
                         onChange={v => onChange({ shadowSize: v })} decimals={1}
                     />
-                    <ColorRow
-                        label="Color"
+                    <ColorSwatchRow
+                        label={isNeon ? "Glow" : "Outline"}
                         value={config.outlineColor}
                         onChange={v => onChange({ outlineColor: v })}
+                    />
+                    {/* Outside the box presets, BackColour is the text's drop
+                        shadow — so this is the shadow's own colour, which had
+                        no control at all and sat on whatever black it inherited. */}
+                    <ColorSwatchRow
+                        label="Shadow"
+                        value={config.backgroundColor}
+                        onChange={v => onChange({ backgroundColor: v })}
                     />
                 </Section>
             )}
@@ -705,7 +733,7 @@ export function SubtitleStylePanel({ config, onChange, embedded = false, onClose
                         value={config.backgroundOpacity} min={0} max={100} step={1}
                         onChange={v => onChange({ backgroundOpacity: v })}
                     />
-                    <ColorRow
+                    <ColorSwatchRow
                         label="Color"
                         value={config.backgroundColor}
                         onChange={v => onChange({ backgroundColor: v })}

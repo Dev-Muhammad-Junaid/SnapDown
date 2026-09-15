@@ -42,6 +42,8 @@ export const STYLE_PRESETS: StylePreset[] = [
      * Default: each word turns yellow as it's spoken. Toggle "Fade inactive"
      * for Spotlight-style dim, "Word entrance" for Cascade-style pop-in.
      */
+    /** Bright saturated text with a glow of its own hue around it. */
+    { id: "neon",        name: "Neon",      desc: "Glowing text, neon-sign look",     icon: "💡" },
     { id: "reveal",      name: "Reveal",    desc: "Word-by-word highlight",           icon: "💡" },
 ];
 

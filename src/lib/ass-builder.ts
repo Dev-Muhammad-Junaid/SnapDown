@@ -150,6 +150,19 @@ const PRESET_DEFAULTS: Record<string, Partial<SubtitleStyleConfig>> = {
         uppercase: true, blur: 2,
     },
 
+    // ── Neon — bright saturated text ringed by a glow of the same hue.
+    //    The glow is not a separate effect: with BorderStyle=1 the stroke is
+    //    OutlineColour, and `blur` softens it into a halo. Giving the stroke
+    //    the text's own colour and blurring it hard is what a neon tube does —
+    //    a bright core bleeding into the colour around it.
+    neon: {
+        primaryColor: "#22D3EE", outlineColor: "#22D3EE",
+        backgroundColor: "#000000", backgroundOpacity: 0,
+        outlineSize: 2.5, shadowSize: 0,
+        bold: true, italic: false, letterSpacing: 1, fontSizeScale: 1.1,
+        uppercase: true, blur: 6,
+    },
+
     // ── Reveal — full sentence; each word turns to PrimaryColour as spoken.
     //    SecondaryColour is set automatically from revealFadeInactive.
     //    Modifier flags add Spotlight (fade) / Cascade (entrance) flavours.
@@ -208,6 +221,7 @@ export const PRESET_BASE_ANIMATION: Record<string, SubtitleStyleConfig["animatio
     cinematic:     "none",
     outline:       "none",
     "bold-center": "none",
+    neon:          "none",
     reveal:        "reveal",
 };
 
@@ -266,6 +280,7 @@ const BASE_FONT_SIZES: Record<string, number> = {
     cinematic:     34,
     outline:       42,
     "bold-center": 60,
+    neon:          46,
     reveal:        48,
 };
 
