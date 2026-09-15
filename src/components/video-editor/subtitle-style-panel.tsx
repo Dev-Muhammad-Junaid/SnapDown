@@ -103,12 +103,36 @@ const TEXT_COLORS = [
     "#22C55E", "#3B82F6", "#F97316", "#EC4899",
 ];
 
-const ANIMATIONS: Array<{ id: SubtitleStyleConfig["animation"]; Icon: LucideIcon; label: string }> = [
-    { id: "none",     Icon: Minus,    label: "None"    },
-    { id: "fade",     Icon: Sparkles, label: "Fade"    },
-    { id: "pop",      Icon: Zap,      label: "Pop"     },
-    { id: "slide-up", Icon: ArrowUp,  label: "Slide"   },
-    { id: "karaoke",  Icon: Mic,      label: "Karaoke" },
+/**
+ * Animations offered in the panel.
+ *
+ * The first five are cue-level: fade, pop and slide-up are ASS override tags
+ * on the whole line, and karaoke re-cuts the line into one cue per word. All
+ * of them work with any preset.
+ *
+ * The last two are different. TikTok and Reveal *are* their animation — the
+ * yellow box that tracks the spoken word, the word that changes colour as it
+ * is said — and picking that preset pins `animation` to it. They had no chip
+ * here at all, so selecting either preset left the Animation row showing
+ * nothing selected, and clicking any chip in it silently threw the preset's
+ * defining behaviour away while the preset itself still read as chosen.
+ *
+ * `onlyFor` keeps each of them out of the row except under its own preset,
+ * where it is the resting state and the way back.
+ */
+const ANIMATIONS: Array<{
+    id: SubtitleStyleConfig["animation"];
+    Icon: LucideIcon;
+    label: string;
+    onlyFor?: string;
+}> = [
+    { id: "none",       Icon: Minus,       label: "None"        },
+    { id: "fade",       Icon: Sparkles,    label: "Fade"        },
+    { id: "pop",        Icon: Zap,         label: "Pop"         },
+    { id: "slide-up",   Icon: ArrowUp,     label: "Slide"       },
+    { id: "karaoke",    Icon: Mic,         label: "Karaoke"     },
+    { id: "tiktok-box", Icon: Highlighter, label: "Word box",    onlyFor: "tiktok" },
+    { id: "reveal",     Icon: Lightbulb,   label: "Word reveal", onlyFor: "reveal" },
 ];
 
 /**
@@ -421,6 +445,10 @@ export function SubtitleStylePanel({ config, onChange, embedded = false, onClose
 
     const isBoxStyle = BOX_STYLE_PRESETS.has(config.preset);
 
+    /** The animation this preset owns, if it owns one. */
+    const ownedAnimation = ANIMATIONS.find(a => a.onlyFor === config.preset);
+    const presetName = STYLE_PRESETS.find(p => p.id === config.preset)?.name ?? "This preset";
+
     // For TikTok / Reveal, `primaryColor` is the highlight colour (the box /
     // the spoken-word colour), not the body text colour — so label it clearly.
     const isHighlightPreset = config.preset === "tiktok" || config.preset === "reveal";
@@ -526,18 +554,25 @@ export function SubtitleStylePanel({ config, onChange, embedded = false, onClose
             {/* ── Animation ── */}
             <Section title="Animation">
                 <ChipRow>
-                    {ANIMATIONS.map(({ id, Icon, label }) => (
-                        <Chip
-                            key={id}
-                            active={config.animation === id}
-                            onClick={() => onChange({ animation: id })}
-                            title={label}
-                        >
-                            <Icon className="size-3 shrink-0" />
-                            {label}
-                        </Chip>
-                    ))}
+                    {ANIMATIONS
+                        .filter(a => !a.onlyFor || a.onlyFor === config.preset)
+                        .map(({ id, Icon, label }) => (
+                            <Chip
+                                key={id}
+                                active={config.animation === id}
+                                onClick={() => onChange({ animation: id })}
+                                title={label}
+                            >
+                                <Icon className="size-3 shrink-0" />
+                                {label}
+                            </Chip>
+                        ))}
                 </ChipRow>
+                {ownedAnimation && config.animation !== ownedAnimation.id && (
+                    <p className="mt-1 text-[9px] leading-snug text-muted-foreground/70">
+                        {presetName}&rsquo;s {ownedAnimation.label.toLowerCase()} is off — pick it again to bring it back.
+                    </p>
+                )}
             </Section>
 
             {/* ── Position (3×3 grid) + Style (B / I) ── */}
@@ -636,7 +671,7 @@ export function SubtitleStylePanel({ config, onChange, embedded = false, onClose
                 />
                 <SliderRow
                     label="Spacing"
-                    value={config.letterSpacing} min={0} max={10} step={0.5}
+                    value={config.letterSpacing} min={0} max={10} step={0.1}
                     onChange={v => onChange({ letterSpacing: v })} decimals={1}
                 />
             </Section>
@@ -646,12 +681,12 @@ export function SubtitleStylePanel({ config, onChange, embedded = false, onClose
                 <Section title="Outline & Shadow">
                     <SliderRow
                         label="Outline"
-                        value={config.outlineSize} min={0} max={8} step={0.5}
+                        value={config.outlineSize} min={0} max={8} step={0.1}
                         onChange={v => onChange({ outlineSize: v })} decimals={1}
                     />
                     <SliderRow
                         label="Shadow"
-                        value={config.shadowSize} min={0} max={10} step={0.5}
+                        value={config.shadowSize} min={0} max={10} step={0.1}
                         onChange={v => onChange({ shadowSize: v })} decimals={1}
                     />
                     <ColorRow
@@ -667,7 +702,7 @@ export function SubtitleStylePanel({ config, onChange, embedded = false, onClose
                 <Section title="Background">
                     <SliderRow
                         label="Opacity"
-                        value={config.backgroundOpacity} min={0} max={100} step={5}
+                        value={config.backgroundOpacity} min={0} max={100} step={1}
                         onChange={v => onChange({ backgroundOpacity: v })}
                     />
                     <ColorRow
