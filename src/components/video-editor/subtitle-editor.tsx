@@ -36,6 +36,7 @@ import {
     MIN_CUE_SECONDS,
 } from "./subtitle-types";
 import { motion, AnimatePresence } from "framer-motion";
+import { hintForEvent, FLASH_MS, type HintId } from "./shortcut-hints";
 
 /**
  * One editable cue time.
@@ -90,6 +91,49 @@ function TimeField({
     );
 }
 
+function useShortcutFlash(): HintId | null {
+    const [flash, setFlash] = useState<HintId | null>(null);
+    const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+    useEffect(() => {
+        const onKeyDown = (e: KeyboardEvent) => {
+            const hint = hintForEvent(e);
+            if (!hint) return;
+            // A key held down repeats; keep it lit rather than restarting the
+            // fade on every repeat.
+            if (timer.current) clearTimeout(timer.current);
+            setFlash(hint);
+            timer.current = setTimeout(() => setFlash(null), FLASH_MS);
+        };
+        document.addEventListener("keydown", onKeyDown);
+        return () => {
+            document.removeEventListener("keydown", onKeyDown);
+            if (timer.current) clearTimeout(timer.current);
+        };
+    }, []);
+
+    return flash;
+}
+
+/** One key cap in the footer, lit while its shortcut is firing. */
+function HintCap({ cap, label, lit }: { cap: string; label: string; lit: boolean }) {
+    return (
+        <span className={cn("transition-colors duration-200", lit ? "text-foreground" : "")}>
+            <kbd
+                className={cn(
+                    "rounded border px-1 py-0.5 font-mono text-[8px] transition-all duration-150",
+                    lit
+                        ? "border-primary bg-primary text-primary-foreground scale-110 shadow-sm shadow-primary/30"
+                        : "border-border/60 bg-muted",
+                )}
+            >
+                {cap}
+            </kbd>{" "}
+            {label}
+        </span>
+    );
+}
+
 interface SubtitleEditorProps {
     subtitles: Subtitle[];
     onSubtitlesChange: (subtitles: Subtitle[]) => void;
@@ -113,6 +157,7 @@ export function SubtitleEditor({
     onUndo,
     onRedo,
 }: SubtitleEditorProps) {
+    const flash = useShortcutFlash();
     const [searchQuery, setSearchQuery] = useState("");
     const [showReviewQueue, setShowReviewQueue] = useState(false);
     const [showFindReplace, setShowFindReplace] = useState(false);
@@ -702,9 +747,9 @@ export function SubtitleEditor({
                                         title="Add a subtitle after this one"
                                         aria-label="Add a subtitle after this one"
                                         onClick={(e) => { e.stopPropagation(); handleAddCue(subtitle.id); }}
-                                        className="absolute left-1/2 -bottom-2.5 z-10 -translate-x-1/2 flex size-5 items-center justify-center rounded-full border border-border bg-background text-muted-foreground opacity-0 shadow-sm transition-all hover:border-primary/40 hover:bg-primary hover:text-primary-foreground group-hover:opacity-100 focus-visible:opacity-100"
+                                        className="absolute left-1/2 -bottom-2 z-10 -translate-x-1/2 flex size-3.5 items-center justify-center rounded-full border border-border bg-background text-muted-foreground opacity-0 shadow-sm transition-all hover:border-primary/40 hover:bg-primary hover:text-primary-foreground group-hover:opacity-100 focus-visible:opacity-100"
                                     >
-                                        <Plus className="size-3" />
+                                        <Plus className="size-2.5" />
                                     </button>
                                 </div>
                             );
@@ -713,28 +758,16 @@ export function SubtitleEditor({
                 )}
             </div>
 
-            {/* Keyboard shortcut hints */}
+            {/* Keyboard shortcut hints. Each cap lights as its shortcut fires,
+                which turns the row from a legend you read once into feedback
+                that the keystroke landed — useful precisely because these are
+                not shortcuts anyone memorises. */}
             <div className="px-3 py-2 text-[9px] text-muted-foreground text-center border-t border-border flex items-center justify-center gap-2 shrink-0 bg-muted/40">
-                <span>
-                    <kbd className="bg-muted px-1 py-0.5 rounded font-mono text-[8px] border border-border/60">↑↓</kbd>{" "}
-                    Nav
-                </span>
-                <span>
-                    <kbd className="bg-muted px-1 py-0.5 rounded font-mono text-[8px] border border-border/60">Space</kbd>{" "}
-                    Play
-                </span>
-                <span>
-                    <kbd className="bg-muted px-1 py-0.5 rounded font-mono text-[8px] border border-border/60">J</kbd>{" "}
-                    -5s
-                </span>
-                <span>
-                    <kbd className="bg-muted px-1 py-0.5 rounded font-mono text-[8px] border border-border/60">L</kbd>{" "}
-                    +5s
-                </span>
-                <span>
-                    <kbd className="bg-muted px-1 py-0.5 rounded font-mono text-[8px] border border-border/60">⌘Z</kbd>{" "}
-                    Undo
-                </span>
+                <HintCap cap="↑↓" label="Nav" lit={flash === "nav"} />
+                <HintCap cap="Space" label="Play" lit={flash === "play"} />
+                <HintCap cap="J" label="-5s" lit={flash === "back"} />
+                <HintCap cap="L" label="+5s" lit={flash === "fwd"} />
+                <HintCap cap="⌘Z" label="Undo" lit={flash === "undo"} />
             </div>
         </div>
     );
