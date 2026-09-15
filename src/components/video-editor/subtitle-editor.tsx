@@ -18,6 +18,7 @@ import {
     FileText,
     Info,
     Plus,
+    Trash2,
 } from "lucide-react";
 import {
     Subtitle,
@@ -33,6 +34,7 @@ import {
     findActiveSubtitle,
     findNearestSubtitle,
     insertCueAfter,
+    deleteCue,
     MIN_CUE_SECONDS,
 } from "./subtitle-types";
 import { motion, AnimatePresence } from "framer-motion";
@@ -229,9 +231,24 @@ export function SubtitleEditor({
         document.querySelector<HTMLTextAreaElement>(`#sub-${id} textarea`)?.focus();
     });
 
-    // Keyboard shortcuts
+    /**
+     * The keyboard handler reads through this instead of closing over state.
+     *
+     * Its dependencies used to include `filteredSubtitles`, which is rebuilt on
+     * every render — so the listener was torn down and re-added on every render
+     * too, and keystrokes arriving in that window were dropped. In practice
+     * ↑↓ navigation and ⌘Z never fired at all, while the hint row underneath
+     * advertised both.
+     */
+    const latest = useRef({ activeId, filteredSubtitles, onSeek, onUndo, onRedo });
+    useEffect(() => {
+        latest.current = { activeId, filteredSubtitles, onSeek, onUndo, onRedo };
+    });
+
+    // Keyboard shortcuts — registered once; see `latest` above.
     useEffect(() => {
         const handler = (e: KeyboardEvent) => {
+            const { activeId, filteredSubtitles, onSeek, onUndo, onRedo } = latest.current;
             const tag = (e.target as HTMLElement)?.tagName;
             if (tag === "INPUT" || tag === "TEXTAREA") return;
 
@@ -273,7 +290,7 @@ export function SubtitleEditor({
         };
         document.addEventListener("keydown", handler);
         return () => document.removeEventListener("keydown", handler);
-    }, [activeId, filteredSubtitles, onSeek, onUndo, onRedo]);
+    }, []);
 
     /**
      * Commit an edited cue time.
@@ -329,6 +346,16 @@ export function SubtitleEditor({
             // in the DOM until React commits, and a requestAnimationFrame can
             // still land before that commit.
             pendingFocusRef.current = newId;
+        },
+        [subtitles, onSubtitlesChange],
+    );
+
+    const handleDeleteCue = useCallback(
+        (id: number) => {
+            const result = deleteCue(subtitles, id);
+            if (!result) return;
+            onSubtitlesChange(result.subtitles);
+            setActiveId(result.activeId);
         },
         [subtitles, onSubtitlesChange],
     );
@@ -683,6 +710,10 @@ export function SubtitleEditor({
                         {filteredSubtitles.map((subtitle) => {
                             const isActive = subtitle.id === activeId;
                             const isLowConfidence = subtitle.confidence < 0.8;
+                            // Deleting the last one would leave the empty state,
+                            // which only offers transcription — no way back to a
+                            // list you can add to.
+                            const isOnlyCue = subtitles.length === 1;
 
                             return (
                                 <div
@@ -719,8 +750,26 @@ export function SubtitleEditor({
                                                     <AlertTriangle className="w-3 h-3" />
                                                 </span>
                                             )}
-                                            <span className="text-[9px] text-muted-foreground/60 font-mono">
-                                                #{subtitle.id}
+                                            {/* Delete takes the number's place
+                                                on hover. Fixed width and right
+                                                alignment so the swap doesn't
+                                                shift the row underneath it. */}
+                                            <span className="flex w-6 justify-end">
+                                                <span className="text-[9px] text-muted-foreground/60 font-mono group-hover:hidden">
+                                                    #{subtitle.id}
+                                                </span>
+                                                <button
+                                                    type="button"
+                                                    disabled={isOnlyCue}
+                                                    title={isOnlyCue
+                                                        ? "The last subtitle can't be deleted — there would be no way to add one back"
+                                                        : "Delete this subtitle"}
+                                                    aria-label="Delete this subtitle"
+                                                    onClick={(e) => { e.stopPropagation(); handleDeleteCue(subtitle.id); }}
+                                                    className="hidden size-3.5 items-center justify-center rounded text-muted-foreground transition-colors group-hover:flex hover:text-destructive disabled:cursor-not-allowed disabled:opacity-30 disabled:hover:text-muted-foreground"
+                                                >
+                                                    <Trash2 className="size-3" />
+                                                </button>
                                             </span>
                                         </div>
                                     </div>

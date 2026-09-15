@@ -180,6 +180,32 @@ export function insertCueAfter(
     };
 }
 
+/**
+ * Remove a cue.
+ *
+ * Its time is not handed to a neighbour. A deleted line leaves silence, and
+ * silence is the correct result — stretching the cue above to cover the gap
+ * would put words on screen while nobody is speaking.
+ *
+ * Returns the id to make active afterwards: the cue that slid into the same
+ * position, or the one above when the last cue was removed.
+ */
+export function deleteCue(
+    subtitles: Subtitle[],
+    id: number,
+): { subtitles: Subtitle[]; activeId: number | null } | null {
+    const index = subtitles.findIndex((s) => s.id === id);
+    if (index === -1) return null;
+
+    const out = subtitles.filter((s) => s.id !== id).map((s, i) => ({ ...s, id: i + 1 }));
+    if (out.length === 0) return { subtitles: out, activeId: null };
+
+    // Ids were just renumbered, so the cue now at `index` is the one that took
+    // the deleted cue's place.
+    const nextActive = out[Math.min(index, out.length - 1)];
+    return { subtitles: out, activeId: nextActive.id };
+}
+
 /** Clip subtitles to a time range and shift timestamps so trimStart becomes 0 */
 export function clipAndShiftSubtitles(
     subtitles: Subtitle[],
