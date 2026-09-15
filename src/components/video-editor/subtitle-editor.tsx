@@ -22,7 +22,8 @@ import {
     Subtitle,
     parseSrtTime,
     formatSrtTime,
-    displayTime,
+    displayCueTime,
+    parseCueTime,
     shiftTime,
     subtitlesToSrt,
     subtitlesToVtt,
@@ -32,6 +33,63 @@ import {
     findNearestSubtitle,
 } from "./subtitle-types";
 import { motion, AnimatePresence } from "framer-motion";
+
+/** Shortest cue we will let an edit produce. Small enough to be invisible,
+ *  large enough that start and end can never coincide. */
+const MIN_CUE_SECONDS = 0.05;
+
+/**
+ * One editable cue time.
+ *
+ * Holds a draft string while focused so the user can type freely, and only
+ * hands the value over on blur or Enter. Escape abandons the edit.
+ */
+function TimeField({
+    value,
+    onCommit,
+    label,
+}: {
+    value: string;
+    onCommit: (raw: string) => boolean;
+    label: string;
+}) {
+    const [draft, setDraft] = useState<string | null>(null);
+    // Escape blurs the field, and blur commits — so the abandon has to be
+    // recorded somewhere the blur handler can see immediately. A state update
+    // is not: the blur handler still closes over the draft Escape just cleared,
+    // and would save the very edit the user asked to throw away.
+    const abandoned = useRef(false);
+    const shown = draft ?? displayCueTime(value);
+
+    const commit = () => {
+        if (abandoned.current) { abandoned.current = false; setDraft(null); return; }
+        if (draft === null) return;
+        // A rejected edit falls back to the cue's real time by clearing the
+        // draft, which is also what Escape does.
+        onCommit(draft);
+        setDraft(null);
+    };
+
+    return (
+        <input
+            type="text"
+            inputMode="decimal"
+            value={shown}
+            title={`${label} — M:SS.mmm`}
+            aria-label={label}
+            onChange={(e) => setDraft(e.target.value)}
+            onFocus={(e) => e.currentTarget.select()}
+            onBlur={commit}
+            onClick={(e) => e.stopPropagation()}
+            onKeyDown={(e) => {
+                e.stopPropagation();
+                if (e.key === "Enter") { commit(); e.currentTarget.blur(); }
+                else if (e.key === "Escape") { abandoned.current = true; setDraft(null); e.currentTarget.blur(); }
+            }}
+            className="w-[4.75rem] bg-transparent text-center tabular-nums outline-none border-b border-transparent hover:border-border focus:border-primary rounded-none transition-colors"
+        />
+    );
+}
 
 interface SubtitleEditorProps {
     subtitles: Subtitle[];
@@ -164,16 +222,41 @@ export function SubtitleEditor({
         return () => document.removeEventListener("keydown", handler);
     }, [activeId, filteredSubtitles, onSeek, onUndo, onRedo]);
 
-    const handleTimeChange = useCallback(
-        (id: number, field: "start" | "end", value: string) => {
-            const parts = value.split(":");
-            if (parts.length !== 2) return;
-            const m = parseInt(parts[0]) || 0;
-            const s = parseInt(parts[1]) || 0;
-            const updated = subtitles.map((sub) =>
-                sub.id === id ? { ...sub, [field]: formatSrtTime(m * 60 + s) } : sub
+    /**
+     * Commit an edited cue time.
+     *
+     * Applied on blur or Enter rather than on every keystroke: half-typed input
+     * is not a value, and rewriting the cue from it meant the field fought
+     * whoever was typing into it.
+     *
+     * Unreadable input is rejected outright — the field springs back to what
+     * the cue actually says. The alternative, treating it as zero, silently
+     * moves the subtitle to the start of the video.
+     */
+    const commitTime = useCallback(
+        (id: number, field: "start" | "end", value: string): boolean => {
+            const parsed = parseCueTime(value);
+            if (parsed === null) return false;
+
+            const cue = subtitles.find((s) => s.id === id);
+            if (!cue) return false;
+            const start = parseSrtTime(cue.start);
+            const end = parseSrtTime(cue.end);
+
+            // A cue that ends before it begins is not a cue. Rather than
+            // refusing the edit, keep the edge the user moved and push the
+            // other one just far enough to stay valid.
+            const next =
+                field === "start"
+                    ? Math.max(0, Math.min(parsed, end - MIN_CUE_SECONDS))
+                    : Math.max(parsed, start + MIN_CUE_SECONDS);
+
+            onSubtitlesChange(
+                subtitles.map((sub) =>
+                    sub.id === id ? { ...sub, [field]: formatSrtTime(next) } : sub
+                )
             );
-            onSubtitlesChange(updated);
+            return true;
         },
         [subtitles, onSubtitlesChange]
     );
@@ -546,22 +629,16 @@ export function SubtitleEditor({
                                 >
                                     <div className="flex items-center justify-between mb-1.5">
                                         <div className="flex items-center gap-1 text-[10px] font-mono text-muted-foreground tabular-nums">
-                                            <input
-                                                type="text"
-                                                value={displayTime(subtitle.start)}
-                                                onChange={(e) => handleTimeChange(subtitle.id, "start", e.target.value)}
-                                                onClick={(e) => e.stopPropagation()}
-                                                className="w-10 bg-transparent text-center outline-none border-b border-transparent hover:border-border focus:border-primary rounded-none transition-colors"
-                                                title="Edit start time (M:SS)"
+                                            <TimeField
+                                                value={subtitle.start}
+                                                label="Start time"
+                                                onCommit={(raw) => commitTime(subtitle.id, "start", raw)}
                                             />
                                             <span>→</span>
-                                            <input
-                                                type="text"
-                                                value={displayTime(subtitle.end)}
-                                                onChange={(e) => handleTimeChange(subtitle.id, "end", e.target.value)}
-                                                onClick={(e) => e.stopPropagation()}
-                                                className="w-10 bg-transparent text-center outline-none border-b border-transparent hover:border-border focus:border-primary rounded-none transition-colors"
-                                                title="Edit end time (M:SS)"
+                                            <TimeField
+                                                value={subtitle.end}
+                                                label="End time"
+                                                onCommit={(raw) => commitTime(subtitle.id, "end", raw)}
                                             />
                                         </div>
                                         <div className="flex items-center gap-1.5">

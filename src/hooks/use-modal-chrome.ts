@@ -17,6 +17,14 @@ import { useEffect } from "react";
  * `<Dialog>` primitive, which provides the same behaviours. This hook is the
  * single home for the equivalent logic in our custom full-screen overlays.
  */
+/** Whether a keystroke landed in something the user is typing into. */
+function isTextEntry(target: EventTarget | null): boolean {
+    const el = target as HTMLElement | null;
+    if (!el || !el.tagName) return false;
+    const tag = el.tagName;
+    return tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || el.isContentEditable;
+}
+
 export function useModalChrome(
     containerRef: React.RefObject<HTMLElement | null>,
     onClose: () => void,
@@ -26,6 +34,12 @@ export function useModalChrome(
 
         const onKeyDown = (e: KeyboardEvent) => {
             if (e.key === "Escape") {
+                // Escape belongs to the field you are typing in first. Closing
+                // the whole editor from inside a text box threw away every
+                // subtitle edit in the session because someone abandoned one
+                // mistyped timecode. The field cancels its own edit and gives
+                // up focus; a second Escape then closes the editor.
+                if (isTextEntry(e.target)) return;
                 onClose();
                 return;
             }

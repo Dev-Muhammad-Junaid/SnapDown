@@ -3,11 +3,11 @@
 
 import { buildAssFile, type SubtitleStyleConfig } from "@/lib/ass-builder";
 import { rgbToAssBgr } from "@/lib/ass-color";
-import { parseSrtTime, formatSrtTime, displayTime, shiftTime } from "@/lib/time";
+import { parseSrtTime, formatSrtTime, displayTime, shiftTime, formatCueTime, displayCueTime, parseCueTime } from "@/lib/time";
 
 // Time helpers now live in @/lib/time; re-export so existing
 // `./subtitle-types` imports (subtitle-editor, etc.) keep working.
-export { parseSrtTime, formatSrtTime, displayTime, shiftTime };
+export { parseSrtTime, formatSrtTime, displayTime, shiftTime, formatCueTime, displayCueTime, parseCueTime };
 
 export interface Subtitle {
     id: number;

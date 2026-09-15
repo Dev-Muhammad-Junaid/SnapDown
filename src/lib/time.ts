@@ -67,3 +67,64 @@ export function displayTime(srtTime: string): string {
 export function shiftTime(timeStr: string, deltaMs: number): string {
     return formatSrtTime(Math.max(0, parseSrtTime(timeStr) + deltaMs / 1000));
 }
+
+/**
+ * Format seconds for a subtitle cue time field: "M:SS.mmm", or "H:MM:SS.mmm"
+ * once the video runs past an hour.
+ *
+ * Distinct from formatClock on purpose. A cue's timing is meaningful down to
+ * the millisecond — that is what keeps a subtitle on the words it belongs to —
+ * so the field a user types into has to be able to show the whole value.
+ * Showing "1:23" for 00:01:23,450 meant editing the field rounded the cue to
+ * the nearest second without saying so, and an hour-long video displayed its
+ * cues as "75:04".
+ */
+export function formatCueTime(seconds: number): string {
+    const totalMs = Math.round(Math.max(0, seconds) * 1000);
+    const ms = totalMs % 1000;
+    const totalSecs = Math.floor(totalMs / 1000);
+    const secs = totalSecs % 60;
+    const mins = Math.floor(totalSecs / 60) % 60;
+    const hours = Math.floor(totalSecs / 3600);
+    const msPart = String(ms).padStart(3, "0");
+    return hours > 0
+        ? `${hours}:${String(mins).padStart(2, "0")}:${String(secs).padStart(2, "0")}.${msPart}`
+        : `${mins}:${String(secs).padStart(2, "0")}.${msPart}`;
+}
+
+/** Display-friendly cue time from an SRT time string. */
+export function displayCueTime(srtTime: string): string {
+    return formatCueTime(parseSrtTime(srtTime));
+}
+
+/**
+ * Parse what someone typed into a cue time field, in seconds.
+ *
+ * Returns null — rather than 0 — for anything it can't read, so a typo can be
+ * rejected and the previous value kept. Silently turning unparseable input
+ * into 0 is how a cue ends up at the start of the video.
+ *
+ * Accepts "12", "1:23", "1:23.450", "1:23,450" (SRT's comma), and
+ * "1:15:04.900". Minutes and seconds may be given unpadded.
+ */
+export function parseCueTime(input: string): number | null {
+    const raw = input.trim().replace(",", ".");
+    if (!raw) return null;
+    if (!/^\d+(:\d{1,2}){0,2}(\.\d{1,3})?$/.test(raw)) return null;
+
+    const [whole, frac = ""] = raw.split(".");
+    const parts = whole.split(":").map(Number);
+    if (parts.some((n) => !Number.isFinite(n))) return null;
+    // Only the leading field may run past 59. "9:99" is a typo, not 10m39s —
+    // accepting it silently moved the cue somewhere nobody asked for.
+    if (parts.slice(1).some((n) => n > 59)) return null;
+
+    let seconds: number;
+    if (parts.length === 3) seconds = parts[0] * 3600 + parts[1] * 60 + parts[2];
+    else if (parts.length === 2) seconds = parts[0] * 60 + parts[1];
+    else seconds = parts[0];
+
+    // "1:23.4" is four hundred milliseconds, not four.
+    const ms = frac ? Number(frac.padEnd(3, "0")) : 0;
+    return seconds + ms / 1000;
+}
