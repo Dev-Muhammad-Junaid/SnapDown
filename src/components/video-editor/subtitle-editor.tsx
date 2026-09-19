@@ -43,6 +43,9 @@ import { motion, AnimatePresence } from "framer-motion";
 import { hintForEvent, FLASH_MS, type HintId } from "./shortcut-hints";
 import { ACCENT_ON, ACCENT_OFF } from "./accent";
 
+/** The two controls that sit on the boundary between one cue and the next. */
+const SEAM_BUTTON = "flex size-3.5 items-center justify-center rounded-full border border-border bg-background text-muted-foreground shadow-sm transition-all hover:border-foreground hover:bg-foreground hover:text-background disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:border-border disabled:hover:bg-background disabled:hover:text-muted-foreground";
+
 /**
  * One editable cue time.
  *
@@ -790,29 +793,14 @@ export function SubtitleEditor({
                                                     <AlertTriangle className="w-3 h-3" />
                                                 </span>
                                             )}
-                                            {/* Merge and delete take the
-                                                number's place on hover. The
-                                                slot is wide enough for both at
-                                                rest, so the swap never shifts
-                                                the row under the pointer. */}
-                                            <span className="flex w-10 items-center justify-end gap-1">
+                                            {/* Delete takes the number's place
+                                                on hover. Fixed width and right
+                                                alignment so the swap doesn't
+                                                shift the row underneath it. */}
+                                            <span className="flex w-6 justify-end">
                                                 <span className="text-[9px] text-muted-foreground/60 font-mono group-hover:hidden">
                                                     #{subtitle.id}
                                                 </span>
-                                                <button
-                                                    type="button"
-                                                    disabled={isLastCue || mergeBlockedByFilter}
-                                                    title={isLastCue
-                                                        ? "Nothing below to merge into"
-                                                        : mergeBlockedByFilter
-                                                            ? "Clear the search to merge — the cue below on screen isn't the one below in the transcript"
-                                                            : "Merge with the subtitle below"}
-                                                    aria-label="Merge with the subtitle below"
-                                                    onClick={(e) => { e.stopPropagation(); handleMergeCue(subtitle.id); }}
-                                                    className="hidden size-3.5 items-center justify-center rounded text-muted-foreground transition-colors group-hover:flex hover:text-foreground disabled:cursor-not-allowed disabled:opacity-30 disabled:hover:text-muted-foreground"
-                                                >
-                                                    <FoldVertical className="size-3" />
-                                                </button>
                                                 <button
                                                     type="button"
                                                     disabled={isOnlyCue}
@@ -843,18 +831,38 @@ export function SubtitleEditor({
                                         )}
                                     />
 
-                                    {/* Sits on the block's bottom edge and only
-                                        exists on hover, so the resting list
-                                        gains no height for it. */}
-                                    <button
-                                        type="button"
-                                        title="Add a subtitle after this one"
-                                        aria-label="Add a subtitle after this one"
-                                        onClick={(e) => { e.stopPropagation(); handleAddCue(subtitle.id); }}
-                                        className="absolute left-1/2 -bottom-2 z-10 -translate-x-1/2 flex size-3.5 items-center justify-center rounded-full border border-border bg-background text-muted-foreground opacity-0 shadow-sm transition-all hover:border-foreground hover:bg-foreground hover:text-background group-hover:opacity-100 focus-visible:opacity-100"
-                                    >
-                                        <Plus className="size-2.5" />
-                                    </button>
+                                    {/* Both of these act on the seam between
+                                        this cue and the next — add opens it,
+                                        merge closes it — so they live on that
+                                        edge rather than up in the header with
+                                        delete, which acts on the cue itself.
+                                        Only on hover, so the resting list gains
+                                        no height for them. */}
+                                    <span className="absolute left-1/2 -bottom-2 z-10 flex -translate-x-1/2 items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
+                                        <button
+                                            type="button"
+                                            title="Add a subtitle after this one"
+                                            aria-label="Add a subtitle after this one"
+                                            onClick={(e) => { e.stopPropagation(); handleAddCue(subtitle.id); }}
+                                            className={SEAM_BUTTON}
+                                        >
+                                            <Plus className="size-2.5" />
+                                        </button>
+                                        {!isLastCue && (
+                                            <button
+                                                type="button"
+                                                disabled={mergeBlockedByFilter}
+                                                title={mergeBlockedByFilter
+                                                    ? "Clear the search to merge — the cue below on screen isn't the one below in the transcript"
+                                                    : "Merge with the subtitle below"}
+                                                aria-label="Merge with the subtitle below"
+                                                onClick={(e) => { e.stopPropagation(); handleMergeCue(subtitle.id); }}
+                                                className={SEAM_BUTTON}
+                                            >
+                                                <FoldVertical className="size-2.5" />
+                                            </button>
+                                        )}
+                                    </span>
                                 </div>
                             );
                         })}
