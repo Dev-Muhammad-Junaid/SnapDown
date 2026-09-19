@@ -22,6 +22,7 @@ import {
     FoldVertical,
     UnfoldVertical,
     Gauge,
+    MoreHorizontal,
 } from "lucide-react";
 import {
     Subtitle,
@@ -46,7 +47,71 @@ import {
 import { motion, AnimatePresence } from "framer-motion";
 import { hintForEvent, FLASH_MS, type HintId } from "./shortcut-hints";
 import { assessCue, describeIssues } from "./cue-quality";
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuSeparator,
+    DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { ACCENT_ON, ACCENT_OFF } from "./accent";
+
+/** Escape a user's search text so it can be matched literally. */
+function escapeRegExp(text: string): string {
+    return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/**
+ * The cue's text with the search term marked.
+ *
+ * Only rendered while a search is running and the row is not the one being
+ * edited — a textarea cannot hold marked-up text, so the choice is between
+ * highlighting and editing, and the row you are editing does not need its
+ * matches pointed out.
+ */
+function HighlightedText({ text, query }: { text: string; query: string }) {
+    const parts = query ? text.split(new RegExp(`(${escapeRegExp(query)})`, "gi")) : [text];
+    const lower = query.toLowerCase();
+    return (
+        <p className="-mx-1.5 whitespace-pre-wrap rounded px-1.5 py-1 text-xs leading-relaxed text-foreground/90">
+            {parts.map((part, i) =>
+                part.toLowerCase() === lower && part !== "" ? (
+                    <mark key={i} className="rounded-sm bg-chart-3/30 text-foreground">{part}</mark>
+                ) : (
+                    <React.Fragment key={i}>{part}</React.Fragment>
+                ),
+            )}
+        </p>
+    );
+}
+
+/**
+ * A textarea that is exactly as tall as its text.
+ *
+ * The height used to be guessed as `text.length / 45` lines, which is wrong
+ * for any line that wraps early or late — a short line with a long word got a
+ * scrollbar, a line of short words got empty space.
+ *
+ * `field-sizing: content` hands the problem to the browser, which is the only
+ * party that knows where the text actually wraps. The obvious alternative —
+ * measuring `scrollHeight` from an effect — is what this replaced: rows are
+ * `content-visibility: auto`, so a row that has not been painted yet reports a
+ * meaningless scrollHeight, and writing that back pinned "Yeah, yeah, yeah" to
+ * 281px. Native sizing runs inside the browser's own layout and has no such
+ * blind spot.
+ */
+function AutoTextarea({
+    className,
+    ...rest
+}: React.TextareaHTMLAttributes<HTMLTextAreaElement> & { value: string }) {
+    return (
+        <textarea
+            {...rest}
+            rows={1}
+            className={cn("resize-none overflow-hidden [field-sizing:content]", className)}
+        />
+    );
+}
 
 /** The two controls that sit on the boundary between one cue and the next. */
 const SEAM_BUTTON = "flex size-3.5 items-center justify-center rounded-full border border-border bg-background text-muted-foreground shadow-sm transition-all hover:border-foreground hover:bg-foreground hover:text-background disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:border-border disabled:hover:bg-background disabled:hover:text-muted-foreground";
@@ -579,27 +644,44 @@ export function SubtitleEditor({
                             <ArrowLeftRight className="w-3.5 h-3.5" />
                         </button>
 
-                        {/* Copy transcript */}
-                        <button
-                            onClick={handleCopyTranscript}
-                            className={cn("p-1.5 rounded-md transition-colors", ACCENT_OFF)}
-                            title="Copy transcript"
-                        >
-                            {copied ? (
-                                <Check className="w-3.5 h-3.5 text-chart-2" />
-                            ) : (
-                                <Copy className="w-3.5 h-3.5" />
-                            )}
-                        </button>
-
-                        {/* Import SRT / VTT */}
-                        <button
-                            onClick={() => fileInputRef.current?.click()}
-                            className={cn("p-1.5 rounded-md transition-colors", ACCENT_OFF)}
-                            title="Import SRT or VTT file"
-                        >
-                            <Upload className="w-3.5 h-3.5" />
-                        </button>
+                        {/* Everything below is occasional: labelled in a menu
+                            rather than five more unlabelled icons competing
+                            with undo and the review queue for the same strip. */}
+                        <DropdownMenu>
+                            <DropdownMenuTrigger
+                                render={
+                                    <button
+                                        type="button"
+                                        title="More actions"
+                                        aria-label="More actions"
+                                        className={cn("rounded-md p-1.5 transition-colors", ACCENT_OFF)}
+                                    />
+                                }
+                            >
+                                <MoreHorizontal className="w-3.5 h-3.5" />
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end" className="min-w-48">
+                                <DropdownMenuItem onClick={handleCopyTranscript}>
+                                    {copied
+                                        ? <Check className="size-3.5 text-chart-2" />
+                                        : <Copy className="size-3.5" />}
+                                    {copied ? "Copied" : "Copy transcript"}
+                                </DropdownMenuItem>
+                                <DropdownMenuSeparator />
+                                <DropdownMenuItem onClick={() => fileInputRef.current?.click()}>
+                                    <Upload className="size-3.5" />
+                                    Import .srt or .vtt…
+                                </DropdownMenuItem>
+                                <DropdownMenuItem onClick={handleExportSrt}>
+                                    <Download className="size-3.5" />
+                                    Export as .srt
+                                </DropdownMenuItem>
+                                <DropdownMenuItem onClick={handleExportVtt}>
+                                    <FileText className="size-3.5" />
+                                    Export as .vtt
+                                </DropdownMenuItem>
+                            </DropdownMenuContent>
+                        </DropdownMenu>
                         <input
                             ref={fileInputRef}
                             type="file"
@@ -607,24 +689,6 @@ export function SubtitleEditor({
                             className="hidden"
                             onChange={handleImportFile}
                         />
-
-                        {/* Export SRT */}
-                        <button
-                            onClick={handleExportSrt}
-                            className={cn("p-1.5 rounded-md transition-colors", ACCENT_OFF)}
-                            title="Export as .srt"
-                        >
-                            <Download className="w-3.5 h-3.5" />
-                        </button>
-
-                        {/* Export VTT */}
-                        <button
-                            onClick={handleExportVtt}
-                            className={cn("p-1.5 rounded-md transition-colors", ACCENT_OFF)}
-                            title="Export as .vtt"
-                        >
-                            <FileText className="w-3.5 h-3.5" />
-                        </button>
                     </div>
                 </div>
 
@@ -799,6 +863,15 @@ export function SubtitleEditor({
                                         setActiveId(subtitle.id);
                                         onSeek(parseSrtTime(subtitle.start));
                                     }}
+                                    // `content-visibility` lets the browser skip
+                                    // layout and paint for rows outside the
+                                    // viewport while leaving them in the DOM, so
+                                    // scrollIntoView, ⌘F and the active-cue
+                                    // tracking all still work on cues that have
+                                    // never been drawn. The intrinsic size keeps
+                                    // the scrollbar honest before a row is
+                                    // measured for real.
+                                    style={{ contentVisibility: "auto", containIntrinsicSize: "auto 74px" }}
                                     className={cn(
                                         "group relative rounded-lg p-2.5 cursor-pointer transition-all duration-200 border",
                                         isActive
@@ -878,19 +951,22 @@ export function SubtitleEditor({
                                         </div>
                                     </div>
 
-                                    <textarea
+                                    {searchQuery && !isActive ? (
+                                        <HighlightedText text={subtitle.text} query={searchQuery} />
+                                    ) : (
+                                    <AutoTextarea
                                         value={subtitle.text}
                                         onChange={(e) => handleTextChange(subtitle.id, e.target.value)}
                                         onClick={(e) => e.stopPropagation()}
                                         placeholder="New subtitle…"
-                                        rows={Math.max(1, Math.ceil(subtitle.text.length / 45))}
                                         className={cn(
-                                            "w-full bg-transparent text-xs leading-relaxed text-foreground/90 resize-none outline-none rounded px-1.5 py-1 -mx-1.5 transition-all placeholder:text-muted-foreground/50",
+                                            "w-full bg-transparent text-xs leading-relaxed text-foreground/90 outline-none rounded px-1.5 py-1 -mx-1.5 transition-all placeholder:text-muted-foreground/50",
                                             isActive
                                                 ? "bg-muted/40 focus:bg-muted/60"
                                                 : "hover:bg-muted/30 focus:bg-muted/40"
                                         )}
                                     />
+                                    )}
 
                                     {/* Both of these act on the seam between
                                         this cue and the next — add opens it,
