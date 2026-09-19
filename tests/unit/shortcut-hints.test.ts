@@ -49,8 +49,10 @@ describe("hintForEvent", () => {
         expect(hintForEvent(ev({ key: " ", ctrlKey: true }))).toBeNull();
     });
 
-    it("treats redo as the undo cap, since they share it", () => {
-        expect(hintForEvent(ev({ key: "y", metaKey: true }))).toBe("undo");
-        expect(hintForEvent(ev({ key: "Z", metaKey: true, shiftKey: true } as never))).toBe("undo");
+    it("separates redo from undo, since they have their own caps", () => {
+        expect(hintForEvent(ev({ key: "y", metaKey: true }))).toBe("redo");
+        expect(hintForEvent(ev({ key: "z", metaKey: true, shiftKey: true } as never))).toBe("redo");
+        // ⌘Z without shift stays undo.
+        expect(hintForEvent(ev({ key: "z", metaKey: true }))).toBe("undo");
     });
 });

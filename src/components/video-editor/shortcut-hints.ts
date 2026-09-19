@@ -7,7 +7,7 @@
  * keystroke landed when it was swallowed by a text box is worse feedback than
  * none at all.
  */
-export type HintId = "nav" | "play" | "back" | "fwd" | "undo";
+export type HintId = "nav" | "play" | "back" | "fwd" | "undo" | "redo";
 
 /** How long a hint stays lit. Long enough to notice, short enough that
  *  holding a key down doesn't turn into a strobe. */
@@ -19,8 +19,11 @@ export function hintForEvent(e: KeyboardEvent): HintId | null {
     if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || el?.isContentEditable) return null;
 
     if (e.metaKey || e.ctrlKey) {
-        // Undo and redo share one cap on the row.
-        return e.key === "z" || e.key === "Z" || e.key === "y" ? "undo" : null;
+        // ⌘Y and ⌘⇧Z are both redo; ⌘Z alone is undo. They have separate caps
+        // on the row, so the shift has to be read rather than ignored.
+        if (e.key === "y" || e.key === "Y") return "redo";
+        if (e.key === "z" || e.key === "Z") return e.shiftKey ? "redo" : "undo";
+        return null;
     }
     if (e.altKey) return null;
 

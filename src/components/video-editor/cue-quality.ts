@@ -59,6 +59,20 @@ export function assessCue(cue: Subtitle): CueQuality {
     return { issues, cps, duration, chars };
 }
 
+/**
+ * Two or three words naming the problem, for the row itself.
+ *
+ * The figure alone ("24") says nothing without knowing what is being counted,
+ * and a colour alone says only that something is wrong. The label is what
+ * makes the flag legible without hovering it.
+ */
+export function summariseIssues(q: CueQuality): string | null {
+    if (q.issues.includes("fast")) return "Too fast";
+    if (q.issues.includes("brief")) return "Too brief";
+    if (q.issues.includes("long")) return "Too long";
+    return null;
+}
+
 /** One line explaining what is wrong, for the row's tooltip. */
 export function describeIssues(q: CueQuality): string | null {
     if (q.issues.length === 0) return null;

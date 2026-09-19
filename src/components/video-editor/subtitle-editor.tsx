@@ -46,7 +46,7 @@ import {
 } from "./subtitle-types";
 import { motion, AnimatePresence } from "framer-motion";
 import { hintForEvent, FLASH_MS, type HintId } from "./shortcut-hints";
-import { assessCue, describeIssues } from "./cue-quality";
+import { assessCue, describeIssues, summariseIssues } from "./cue-quality";
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -568,7 +568,7 @@ export function SubtitleEditor({
             {/* Toolbar */}
             <div className="border-b border-border bg-card/90 backdrop-blur-sm shrink-0">
                 <div className="h-12 flex items-center justify-between px-3 gap-2">
-                    <div className="flex items-center gap-1">
+                    <div className="flex min-w-0 items-center gap-1.5">
                         {/* Review queue — icon-only with count badge */}
                         <button
                             onClick={() => setShowReviewQueue(!showReviewQueue)}
@@ -586,40 +586,15 @@ export function SubtitleEditor({
                             )}
                         </button>
 
-                        {/* Transcript stats — tooltip on hover (native title) */}
-                        <button
-                            type="button"
-                            title={`${subtitles.length} subtitles · ${totalWords} words · ${statsMins}m ${String(statsSecs).padStart(2, "0")}s`}
-                            aria-label="Transcript info"
-                            className={cn("p-1.5 rounded-md transition-colors", ACCENT_OFF)}
-                        >
-                            <Info className="w-3.5 h-3.5" />
-                        </button>
+                        {/* The stats used to hide behind an info icon, which
+                            cost a slot in a crowded strip to conceal three
+                            short numbers. There is room for them now. */}
+                        <span className="truncate text-[10px] tabular-nums text-muted-foreground/80">
+                            {subtitles.length} cues · {totalWords} words · {statsMins}m {String(statsSecs).padStart(2, "0")}s
+                        </span>
                     </div>
 
                     <div className="flex items-center gap-0.5">
-                        {/* Undo */}
-                        <button
-                            onClick={onUndo}
-                            disabled={!canUndo}
-                            className={cn("p-1.5 rounded-md transition-colors disabled:cursor-not-allowed disabled:opacity-30", ACCENT_OFF)}
-                            title="Undo (⌘Z)"
-                        >
-                            <Undo2 className="w-3.5 h-3.5" />
-                        </button>
-
-                        {/* Redo */}
-                        <button
-                            onClick={onRedo}
-                            disabled={!canRedo}
-                            className={cn("p-1.5 rounded-md transition-colors disabled:cursor-not-allowed disabled:opacity-30", ACCENT_OFF)}
-                            title="Redo (⌘Y)"
-                        >
-                            <Redo2 className="w-3.5 h-3.5" />
-                        </button>
-
-                        <div className="w-px h-4 bg-border mx-0.5" />
-
                         {/* Timing offset */}
                         <button
                             onClick={() => setShowTimingOffset(!showTimingOffset)}
@@ -851,6 +826,7 @@ export function SubtitleEditor({
                             // the speed it goes past.
                             const quality = assessCue(subtitle);
                             const qualityNote = describeIssues(quality);
+                            const qualityLabel = summariseIssues(quality);
                             const canSplitHere =
                                 currentTime > parseSrtTime(subtitle.start) + MIN_CUE_SECONDS &&
                                 currentTime < parseSrtTime(subtitle.end) - MIN_CUE_SECONDS;
@@ -859,10 +835,13 @@ export function SubtitleEditor({
                                 <div
                                     key={subtitle.id}
                                     id={`sub-${subtitle.id}`}
+                                    className="group relative"
                                     onClick={() => {
                                         setActiveId(subtitle.id);
                                         onSeek(parseSrtTime(subtitle.start));
                                     }}
+                                >
+                                <div
                                     // `content-visibility` lets the browser skip
                                     // layout and paint for rows outside the
                                     // viewport while leaving them in the DOM, so
@@ -873,7 +852,7 @@ export function SubtitleEditor({
                                     // measured for real.
                                     style={{ contentVisibility: "auto", containIntrinsicSize: "auto 74px" }}
                                     className={cn(
-                                        "group relative rounded-lg p-2.5 cursor-pointer transition-all duration-200 border",
+                                        "relative rounded-lg p-2.5 cursor-pointer transition-all duration-200 border",
                                         isActive
                                             ? "bg-muted border-border shadow-sm"
                                             : "bg-transparent border-transparent hover:bg-muted/50 hover:border-border/60",
@@ -899,13 +878,13 @@ export function SubtitleEditor({
                                             />
                                         </div>
                                         <div className="flex items-center gap-1.5">
-                                            {qualityNote && (
+                                            {qualityLabel && (
                                                 <span
-                                                    className="hidden items-center gap-0.5 font-mono text-[9px] tabular-nums text-chart-3/90 group-hover:flex"
-                                                    title={qualityNote}
+                                                    className="flex items-center gap-0.5 rounded bg-chart-3/15 px-1 text-[9px] font-medium text-chart-3"
+                                                    title={qualityNote ?? undefined}
                                                 >
-                                                    <Gauge className="size-3" />
-                                                    {Math.round(quality.cps)}
+                                                    <Gauge className="size-2.5" />
+                                                    {qualityLabel}
                                                 </span>
                                             )}
                                             {isLowConfidence && (
@@ -967,6 +946,7 @@ export function SubtitleEditor({
                                         )}
                                     />
                                     )}
+                                    </div>
 
                                     {/* Both of these act on the seam between
                                         this cue and the next — add opens it,
@@ -974,8 +954,17 @@ export function SubtitleEditor({
                                         edge rather than up in the header with
                                         delete, which acts on the cue itself.
                                         Only on hover, so the resting list gains
-                                        no height for them. */}
-                                    <span className="absolute left-1/2 -bottom-2 z-10 flex -translate-x-1/2 items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
+                                        no height for them.
+
+                                        Deliberately a sibling of the card, not
+                                        a child. The card is
+                                        `content-visibility: auto`, which brings
+                                        paint containment with it and clips
+                                        anything hanging over its edge — which
+                                        is exactly what these do. Inside it they
+                                        were cut in half and drawn beneath the
+                                        next card. */}
+                                    <span className="absolute left-1/2 -bottom-2 z-20 flex -translate-x-1/2 items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
                                         <button
                                             type="button"
                                             title="Add a subtitle after this one"
@@ -1017,6 +1006,7 @@ export function SubtitleEditor({
                 <HintCap cap="J" label="-5s" lit={flash === "back"} />
                 <HintCap cap="L" label="+5s" lit={flash === "fwd"} />
                 <HintCap cap="⌘Z" label="Undo" lit={flash === "undo"} spent={!canUndo} />
+                <HintCap cap="⌘Y" label="Redo" lit={flash === "redo"} spent={!canRedo} />
             </div>
         </div>
     );
