@@ -208,6 +208,51 @@ export function deleteCue(
     return { subtitles: out, activeId: nextActive.id };
 }
 
+/**
+ * Join a cue with the one after it.
+ *
+ * The merged cue runs from the first one's start to the second one's end, so
+ * any silence between them is swallowed — which is the point. Merging is for
+ * the pair of half-second fragments that flash past unreadably; the combined
+ * cue needs the whole span to be worth reading.
+ *
+ * Confidence takes the lower of the two. A confident line joined to a shaky
+ * one is a line you still want to check, and dropping the flag would hide it
+ * from the review queue.
+ */
+export function mergeCueWithNext(
+    subtitles: Subtitle[],
+    id: number,
+): { subtitles: Subtitle[]; activeId: number } | null {
+    const index = subtitles.findIndex((s) => s.id === id);
+    // Nothing to merge into on the last cue.
+    if (index === -1 || index === subtitles.length - 1) return null;
+
+    const first = subtitles[index];
+    const second = subtitles[index + 1];
+
+    // Joined with a space rather than a newline: two fragments are one
+    // sentence far more often than they are two lines, and a stray break is
+    // harder to notice than a missing one.
+    const text = [first.text.trim(), second.text.trim()].filter(Boolean).join(" ");
+
+    const merged: Subtitle = {
+        id: first.id,
+        start: first.start,
+        end: second.end,
+        text,
+        confidence: Math.min(first.confidence, second.confidence),
+    };
+
+    const out = [...subtitles];
+    out.splice(index, 2, merged);
+
+    return {
+        subtitles: out.map((s, i) => ({ ...s, id: i + 1 })),
+        activeId: index + 1,
+    };
+}
+
 /** Clip subtitles to a time range and shift timestamps so trimStart becomes 0 */
 export function clipAndShiftSubtitles(
     subtitles: Subtitle[],

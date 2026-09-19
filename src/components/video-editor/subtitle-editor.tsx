@@ -19,6 +19,7 @@ import {
     Info,
     Plus,
     Trash2,
+    FoldVertical,
 } from "lucide-react";
 import {
     Subtitle,
@@ -35,6 +36,7 @@ import {
     findNearestSubtitle,
     insertCueAfter,
     deleteCue,
+    mergeCueWithNext,
     MIN_CUE_SECONDS,
 } from "./subtitle-types";
 import { motion, AnimatePresence } from "framer-motion";
@@ -208,6 +210,9 @@ export function SubtitleEditor({
     const statsSecs = Math.floor(totalDurationSec % 60);
     const needsReviewCount = subtitles.filter((s) => s.confidence < 0.8).length;
 
+    /** Whether what's on screen is a subset of the transcript. */
+    const isFiltered = searchQuery.trim() !== "" || showReviewQueue;
+
     // Filter subtitles
     const filteredSubtitles = subtitles.filter((s) => {
         if (showReviewQueue && s.confidence >= 0.8) return false;
@@ -373,6 +378,16 @@ export function SubtitleEditor({
     const handleDeleteCue = useCallback(
         (id: number) => {
             const result = deleteCue(subtitles, id);
+            if (!result) return;
+            onSubtitlesChange(result.subtitles);
+            setActiveId(result.activeId);
+        },
+        [subtitles, onSubtitlesChange],
+    );
+
+    const handleMergeCue = useCallback(
+        (id: number) => {
+            const result = mergeCueWithNext(subtitles, id);
             if (!result) return;
             onSubtitlesChange(result.subtitles);
             setActiveId(result.activeId);
@@ -728,6 +743,17 @@ export function SubtitleEditor({
                             // which only offers transcription — no way back to a
                             // list you can add to.
                             const isOnlyCue = subtitles.length === 1;
+                            // Merge joins a cue to the one below it, so the
+                            // bottom cue has nothing to join to. Compared
+                            // against the unfiltered list: a search or the
+                            // review queue can hide the cue below without
+                            // meaning it is not there.
+                            const isLastCue = subtitles[subtitles.length - 1]?.id === subtitle.id;
+                            // While the list is filtered, the row under this
+                            // one on screen is not the cue merge would join it
+                            // to. Rather than quietly pulling in words from a
+                            // cue the user cannot see, the button says so.
+                            const mergeBlockedByFilter = isFiltered && !isLastCue;
 
                             return (
                                 <div
@@ -764,14 +790,29 @@ export function SubtitleEditor({
                                                     <AlertTriangle className="w-3 h-3" />
                                                 </span>
                                             )}
-                                            {/* Delete takes the number's place
-                                                on hover. Fixed width and right
-                                                alignment so the swap doesn't
-                                                shift the row underneath it. */}
-                                            <span className="flex w-6 justify-end">
+                                            {/* Merge and delete take the
+                                                number's place on hover. The
+                                                slot is wide enough for both at
+                                                rest, so the swap never shifts
+                                                the row under the pointer. */}
+                                            <span className="flex w-10 items-center justify-end gap-1">
                                                 <span className="text-[9px] text-muted-foreground/60 font-mono group-hover:hidden">
                                                     #{subtitle.id}
                                                 </span>
+                                                <button
+                                                    type="button"
+                                                    disabled={isLastCue || mergeBlockedByFilter}
+                                                    title={isLastCue
+                                                        ? "Nothing below to merge into"
+                                                        : mergeBlockedByFilter
+                                                            ? "Clear the search to merge — the cue below on screen isn't the one below in the transcript"
+                                                            : "Merge with the subtitle below"}
+                                                    aria-label="Merge with the subtitle below"
+                                                    onClick={(e) => { e.stopPropagation(); handleMergeCue(subtitle.id); }}
+                                                    className="hidden size-3.5 items-center justify-center rounded text-muted-foreground transition-colors group-hover:flex hover:text-foreground disabled:cursor-not-allowed disabled:opacity-30 disabled:hover:text-muted-foreground"
+                                                >
+                                                    <FoldVertical className="size-3" />
+                                                </button>
                                                 <button
                                                     type="button"
                                                     disabled={isOnlyCue}
