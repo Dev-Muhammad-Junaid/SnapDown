@@ -19,8 +19,8 @@ import {
     Info,
     Plus,
     Trash2,
-    FoldVertical,
-    UnfoldVertical,
+    Merge,
+    SquareSplitVertical,
     Gauge,
     MoreHorizontal,
 } from "lucide-react";
@@ -114,7 +114,7 @@ function AutoTextarea({
 }
 
 /** The two controls that sit on the boundary between one cue and the next. */
-const SEAM_BUTTON = "flex size-3.5 items-center justify-center rounded-full border border-border bg-background text-muted-foreground shadow-sm transition-all hover:border-foreground hover:bg-foreground hover:text-background disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:border-border disabled:hover:bg-background disabled:hover:text-muted-foreground";
+const SEAM_BUTTON = "flex size-[18px] items-center justify-center rounded-full border border-border bg-background text-muted-foreground shadow-sm transition-all hover:border-foreground hover:bg-foreground hover:text-background disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:border-border disabled:hover:bg-background disabled:hover:text-muted-foreground";
 
 /**
  * One editable cue time.
@@ -898,7 +898,7 @@ export function SubtitleEditor({
                                                 slot is wide enough for both at
                                                 rest, so the swap never shifts
                                                 the row under the pointer. */}
-                                            <span className="flex w-10 items-center justify-end gap-1">
+                                            <span className="flex w-12 items-center justify-end gap-1">
                                                 <span className="text-[9px] text-muted-foreground/60 font-mono group-hover:hidden">
                                                     #{subtitle.id}
                                                 </span>
@@ -910,9 +910,9 @@ export function SubtitleEditor({
                                                         : "Move the playhead inside this subtitle to split it"}
                                                     aria-label="Split this subtitle at the playhead"
                                                     onClick={(e) => { e.stopPropagation(); handleSplitCue(subtitle.id); }}
-                                                    className="hidden size-3.5 items-center justify-center rounded text-muted-foreground transition-colors group-hover:flex hover:text-foreground disabled:cursor-not-allowed disabled:opacity-30 disabled:hover:text-muted-foreground"
+                                                    className="hidden size-[18px] items-center justify-center rounded text-muted-foreground transition-colors group-hover:flex hover:text-foreground disabled:cursor-not-allowed disabled:opacity-30 disabled:hover:text-muted-foreground"
                                                 >
-                                                    <UnfoldVertical className="size-3" />
+                                                    <SquareSplitVertical className="size-3.5" />
                                                 </button>
                                                 <button
                                                     type="button"
@@ -922,9 +922,9 @@ export function SubtitleEditor({
                                                         : "Delete this subtitle"}
                                                     aria-label="Delete this subtitle"
                                                     onClick={(e) => { e.stopPropagation(); handleDeleteCue(subtitle.id); }}
-                                                    className="hidden size-3.5 items-center justify-center rounded text-muted-foreground transition-colors group-hover:flex hover:text-destructive disabled:cursor-not-allowed disabled:opacity-30 disabled:hover:text-muted-foreground"
+                                                    className="hidden size-[18px] items-center justify-center rounded text-muted-foreground transition-colors group-hover:flex hover:text-destructive disabled:cursor-not-allowed disabled:opacity-30 disabled:hover:text-muted-foreground"
                                                 >
-                                                    <Trash2 className="size-3" />
+                                                    <Trash2 className="size-3.5" />
                                                 </button>
                                             </span>
                                         </div>
@@ -964,7 +964,7 @@ export function SubtitleEditor({
                                         is exactly what these do. Inside it they
                                         were cut in half and drawn beneath the
                                         next card. */}
-                                    <span className="absolute left-1/2 -bottom-2 z-20 flex -translate-x-1/2 items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
+                                    <span className="absolute left-1/2 -bottom-[11px] z-20 flex -translate-x-1/2 items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
                                         <button
                                             type="button"
                                             title="Add a subtitle after this one"
@@ -972,7 +972,7 @@ export function SubtitleEditor({
                                             onClick={(e) => { e.stopPropagation(); handleAddCue(subtitle.id); }}
                                             className={SEAM_BUTTON}
                                         >
-                                            <Plus className="size-2.5" />
+                                            <Plus className="size-3" />
                                         </button>
                                         {!isLastCue && (
                                             <button
@@ -985,7 +985,7 @@ export function SubtitleEditor({
                                                 onClick={(e) => { e.stopPropagation(); handleMergeCue(subtitle.id); }}
                                                 className={SEAM_BUTTON}
                                             >
-                                                <FoldVertical className="size-2.5" />
+                                                <Merge className="size-3" />
                                             </button>
                                         )}
                                     </span>
@@ -1003,8 +1003,6 @@ export function SubtitleEditor({
             <div className="px-3 py-2 text-[9px] text-muted-foreground text-center border-t border-border flex items-center justify-center gap-2 shrink-0 bg-muted/40">
                 <HintCap cap="↑↓" label="Nav" lit={flash === "nav"} />
                 <HintCap cap="Space" label="Play" lit={flash === "play"} />
-                <HintCap cap="J" label="-5s" lit={flash === "back"} />
-                <HintCap cap="L" label="+5s" lit={flash === "fwd"} />
                 <HintCap cap="⌘Z" label="Undo" lit={flash === "undo"} spent={!canUndo} />
                 <HintCap cap="⌘Y" label="Redo" lit={flash === "redo"} spent={!canRedo} />
             </div>

@@ -7,7 +7,7 @@
  * keystroke landed when it was swallowed by a text box is worse feedback than
  * none at all.
  */
-export type HintId = "nav" | "play" | "back" | "fwd" | "undo" | "redo";
+export type HintId = "nav" | "play" | "undo" | "redo";
 
 /** How long a hint stays lit. Long enough to notice, short enough that
  *  holding a key down doesn't turn into a strobe. */
@@ -31,8 +31,9 @@ export function hintForEvent(e: KeyboardEvent): HintId | null {
         case "ArrowUp":
         case "ArrowDown": return "nav";
         case " ": return "play";
-        case "j": case "J": return "back";
-        case "l": case "L": return "fwd";
+        // J and L still seek ±5s globally, but they have no cap here: in a
+        // list of cues, ↑↓ steps to the next line's start, which is where you
+        // wanted to land anyway.
         default: return null;
     }
 }

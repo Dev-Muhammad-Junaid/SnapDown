@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { assessCue, describeIssues, MAX_CPS, MAX_CHARS } from "@/components/video-editor/cue-quality";
+import { assessCue, describeIssues, summariseIssues, MAX_CPS } from "@/components/video-editor/cue-quality";
 import { formatSrtTime } from "@/lib/time";
 import type { Subtitle } from "@/components/video-editor/subtitle-types";
 
@@ -28,14 +28,16 @@ describe("assessCue", () => {
         expect(q.issues).not.toContain("fast");
     });
 
-    it("flags a line longer than two lines fit", () => {
-        expect(assessCue(cue(0, 60, words(MAX_CHARS + 10))).issues).toContain("long");
-        expect(assessCue(cue(0, 60, words(MAX_CHARS))).issues).not.toContain("long");
+    it("says nothing about a long line that is on screen long enough", () => {
+        // Line length was tried as a check and removed: a long line read at a
+        // comfortable speed is a long line on purpose.
+        expect(assessCue(cue(0, 60, words(200))).issues).toEqual([]);
     });
 
-    it("flags a cue too brief to read", () => {
-        // 0.32s single words appear 34 times in the long transcript.
-        expect(assessCue(cue(0, 0.32, "کرنے")).issues).toContain("brief");
+    it("says nothing about a brief cue with little in it", () => {
+        // A 0.32s single word is a brief word, not a problem. 34 of them
+        // appear in the long transcript and none is worth interrupting for.
+        expect(assessCue(cue(0, 0.32, "ok")).issues).toEqual([]);
     });
 
     it("says nothing about an empty cue", () => {
@@ -53,9 +55,9 @@ describe("assessCue", () => {
         expect(assessCue(cue(0, 4, "a     b")).chars).toBe(3);
     });
 
-    it("can report more than one problem at once", () => {
-        const q = assessCue(cue(0, 2, words(MAX_CHARS + 40)));
-        expect(q.issues).toEqual(expect.arrayContaining(["fast", "long"]));
+    it("names the problem in two words, for the row itself", () => {
+        expect(summariseIssues(assessCue(cue(0, 1, words(60))))).toBe("Too fast");
+        expect(summariseIssues(assessCue(cue(0, 10, "comfortable")))).toBeNull();
     });
 });
 

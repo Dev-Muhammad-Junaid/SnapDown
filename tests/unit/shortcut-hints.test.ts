@@ -21,15 +21,12 @@ describe("hintForEvent", () => {
         expect(hintForEvent(ev({ key: "ArrowUp" }))).toBe("nav");
         expect(hintForEvent(ev({ key: "ArrowDown" }))).toBe("nav");
         expect(hintForEvent(ev({ key: " " }))).toBe("play");
-        expect(hintForEvent(ev({ key: "j" }))).toBe("back");
-        expect(hintForEvent(ev({ key: "L" }))).toBe("fwd");
         expect(hintForEvent(ev({ key: "z", metaKey: true }))).toBe("undo");
         expect(hintForEvent(ev({ key: "z", ctrlKey: true }))).toBe("undo");
     });
 
     it("stays dark while typing", () => {
         for (const tag of ["INPUT", "TEXTAREA", "SELECT", "CE"]) {
-            expect(hintForEvent(ev({ key: "j" }, tag)), tag).toBeNull();
             expect(hintForEvent(ev({ key: " " }, tag)), tag).toBeNull();
             expect(hintForEvent(ev({ key: "ArrowUp" }, tag)), tag).toBeNull();
             expect(hintForEvent(ev({ key: "z", metaKey: true }, tag)), tag).toBeNull();
@@ -37,16 +34,17 @@ describe("hintForEvent", () => {
     });
 
     it("ignores keys that aren't on the hint row", () => {
-        for (const key of ["k", "i", "o", "Home", "End", "ArrowLeft", "a", "Escape"]) {
+        // J and L still seek ±5s globally; they simply have no cap here, so
+        // nothing should light when they are pressed.
+        for (const key of ["j", "J", "l", "L", "k", "i", "o", "Home", "End", "ArrowLeft", "a", "Escape"]) {
             expect(hintForEvent(ev({ key })), key).toBeNull();
         }
     });
 
-    it("does not light a seek hint when a modifier is held", () => {
-        // ⌘J is not J — the modal's own handler bails on modifiers too.
-        expect(hintForEvent(ev({ key: "j", metaKey: true }))).toBeNull();
-        expect(hintForEvent(ev({ key: "l", altKey: true }))).toBeNull();
+    it("does not light a hint when a modifier is held", () => {
+        // ⌘Space is not Space — the modal's own handler bails on modifiers too.
         expect(hintForEvent(ev({ key: " ", ctrlKey: true }))).toBeNull();
+        expect(hintForEvent(ev({ key: "ArrowUp", altKey: true }))).toBeNull();
     });
 
     it("separates redo from undo, since they have their own caps", () => {

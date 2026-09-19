@@ -8,10 +8,15 @@ import type { Subtitle } from "./subtitle-types";
  * the words are right. These are about whether the cue is readable at all,
  * which is a different question and the one the transcription never asks.
  *
- * Measured on a real 4.5-hour transcript: 73 cues too fast to read, 42 lines
- * past a comfortable length, and — worth saying — 0 overlapping cues across
- * 2,165 of them. Overlap detection was dropped for that reason; it is a real
- * subtitle problem that this transcriber does not produce.
+ * Only reading speed is checked. Line length and very brief cues were both
+ * tried and removed: a long line is usually a long line on purpose, and a
+ * brief one is usually a brief word, so neither earned the attention its flag
+ * cost. Overlap was never added — across 2,165 cues in two real transcripts
+ * this transcriber produced exactly zero overlapping pairs.
+ *
+ * Too fast is the one that survives, because it is the one a viewer actually
+ * cannot do anything about: 73 cues in a 4.5-hour transcript go past quicker
+ * than they can be read.
  */
 
 /**
@@ -21,17 +26,7 @@ import type { Subtitle } from "./subtitle-types";
  */
 export const MAX_CPS = 21;
 
-/**
- * Characters before a cue wants a second line. 42 per line is the common
- * limit and two lines is the usual maximum, so 84 is where a cue stops
- * fitting the screen rather than merely being long.
- */
-export const MAX_CHARS = 84;
-
-/** Below this a cue is too brief to read regardless of how little it says. */
-export const MIN_READABLE_SECONDS = 0.7;
-
-export type CueIssue = "fast" | "long" | "brief";
+export type CueIssue = "fast";
 
 export interface CueQuality {
     issues: CueIssue[];
@@ -50,11 +45,7 @@ export function assessCue(cue: Subtitle): CueQuality {
 
     const issues: CueIssue[] = [];
     // An empty cue is a cue you are still writing, not a problem to flag.
-    if (chars > 0) {
-        if (duration > 0 && cps > MAX_CPS) issues.push("fast");
-        if (chars > MAX_CHARS) issues.push("long");
-        if (duration > 0 && duration < MIN_READABLE_SECONDS) issues.push("brief");
-    }
+    if (chars > 0 && duration > 0 && cps > MAX_CPS) issues.push("fast");
 
     return { issues, cps, duration, chars };
 }
@@ -67,24 +58,11 @@ export function assessCue(cue: Subtitle): CueQuality {
  * makes the flag legible without hovering it.
  */
 export function summariseIssues(q: CueQuality): string | null {
-    if (q.issues.includes("fast")) return "Too fast";
-    if (q.issues.includes("brief")) return "Too brief";
-    if (q.issues.includes("long")) return "Too long";
-    return null;
+    return q.issues.includes("fast") ? "Too fast" : null;
 }
 
 /** One line explaining what is wrong, for the row's tooltip. */
 export function describeIssues(q: CueQuality): string | null {
     if (q.issues.length === 0) return null;
-    const parts: string[] = [];
-    if (q.issues.includes("fast")) {
-        parts.push(`${Math.round(q.cps)} characters per second — too fast to read (limit ${MAX_CPS})`);
-    }
-    if (q.issues.includes("long")) {
-        parts.push(`${q.chars} characters — longer than two lines fit (limit ${MAX_CHARS})`);
-    }
-    if (q.issues.includes("brief")) {
-        parts.push(`on screen for ${q.duration.toFixed(2)}s — too brief to read`);
-    }
-    return parts.join("; ");
+    return `${Math.round(q.cps)} characters per second — too fast to read (limit ${MAX_CPS})`;
 }
