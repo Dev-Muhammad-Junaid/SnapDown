@@ -2,7 +2,7 @@
 
 import React, { useState, useRef, useEffect, useCallback, useMemo, useSyncExternalStore } from "react";
 import { cn } from "@/lib/utils";
-import { PILL_GROUP, PILL_BASE, PILL_ON, PILL_OFF } from "./accent";
+import { PILL_GROUP, PILL_BASE, PILL_ON, PILL_OFF, ACCENT_ON } from "./accent";
 import { formatClock as formatTime } from "@/lib/time";
 import { useModalChrome } from "@/hooks/use-modal-chrome";
 import { Button } from "@/components/ui/button";
@@ -21,6 +21,8 @@ import {
     Mic,
     RectangleHorizontal,
     Palette,
+    PictureInPicture,
+    PictureInPicture2,
 } from "lucide-react";
 import { TimelineScrubber } from "./timeline-scrubber";
 import { useTimelineAssets } from "@/hooks/use-timeline-assets";
@@ -459,15 +461,16 @@ export function VideoEditorModal({
      */
     const [exportOpen, setExportOpen] = useState(false);
     /**
-     * Whether the floating subtitle style panel is open.
+     * Whether the Style controls are floating over the preview instead of
+     * sitting in the sidebar.
      *
-     * It opens only when asked. An earlier version summoned itself whenever
-     * subtitles were switched on and could then only be dismissed until the
-     * next time something summoned it — so it was never quite the user's to
-     * place. The Style button in the header is now the whole story: it opens
-     * it, and it closes it, as does the panel's own X.
+     * Both are the same panel. Floating exists for narrow windows, where the
+     * sidebar stacks under the video and pushes the picture into a strip —
+     * popping the controls out gives the frame back its height while you style
+     * against it. The control to do it lives in the Style tab, because that is
+     * the thing being moved.
      */
-    const [stylePanelOpen, setStylePanelOpen] = useState(false);
+    const [styleFloating, setStyleFloating] = useState(false);
 
     // Preview volume is separate from export audio on purpose — muting what you
     // hear while editing must not silently mute the file you export.
@@ -504,12 +507,14 @@ export function VideoEditorModal({
     const hasSubtitles = subtitles.length > 0;
 
     /**
-     * Trim and crop burn the same subtitles the Subtitles tab styles, so the
-     * styling controls are worth having there too — but only when the export
-     * will actually burn them in. Turning subtitles off in the export options
-     * takes the button away with them.
+     * The floating panel belongs to the Style tab and nothing else.
+     *
+     * It used to appear in trim and crop, on the theory that those modes burn
+     * the same subtitles so they might want the styling controls too. In
+     * practice it put a panel over the frame in the two modes where the frame
+     * is the thing being worked on.
      */
-    const stylePanelApplies = mode !== "subtitles" && hasSubtitles && includeSubtitles;
+    const styleIsFloating = mode === "subtitles" && sidebarTab === "style" && styleFloating;
 
     // Every export re-encodes now — trims included, so a cut lands exactly
     // where it is placed — which means the quality choice always applies and
@@ -623,21 +628,6 @@ export function VideoEditorModal({
                 </div>
 
                 <div className="flex items-center gap-2 sm:gap-3">
-                    {/* Closing the floating panel used to be one-way until you
-                        switched modes. This is the way back in — and the way
-                        out, so the same control does both. */}
-                    {stylePanelApplies && (
-                        <Button
-                            variant={stylePanelOpen ? "secondary" : "ghost"}
-                            size="sm"
-                            aria-pressed={stylePanelOpen}
-                            title={stylePanelOpen ? "Hide subtitle style" : "Show subtitle style"}
-                            onClick={() => setStylePanelOpen((open) => !open)}
-                        >
-                            <Palette className="w-4 h-4 sm:mr-2" />
-                            <span className="hidden sm:inline">Style</span>
-                        </Button>
-                    )}
                     <Button
                         variant="secondary"
                         size="sm"
@@ -785,8 +775,8 @@ export function VideoEditorModal({
                             className="flex flex-col overflow-hidden shrink-0 bg-background border-t sm:border-t-0 sm:border-l border-border"
                         >
                             {/* Tab bar — same pill pattern as the header Trim / Crop / Subtitles tabs */}
-                            <div className="px-3 py-2 border-b border-border/60 shrink-0">
-                                <div className={PILL_GROUP}>
+                            <div className="flex items-center gap-2 px-3 py-2 border-b border-border/60 shrink-0">
+                                <div className={cn(PILL_GROUP, "flex-1")}>
                                     {([
                                         { id: "style", label: "Style", Icon: Palette  },
                                         { id: "cues",  label: "Cues",  Icon: Captions },
@@ -801,6 +791,33 @@ export function VideoEditorModal({
                                         </button>
                                     ))}
                                 </div>
+                                {/* Pops the Style controls out over the preview.
+                                    Lives here rather than in the header because
+                                    this is the panel being moved, and because
+                                    in trim and crop — where it used to live —
+                                    it covered the frame those modes exist to
+                                    work on. */}
+                                {sidebarTab === "style" && (
+                                    <button
+                                        type="button"
+                                        onClick={() => setStyleFloating((f) => !f)}
+                                        aria-pressed={styleFloating}
+                                        title={styleFloating
+                                            ? "Dock the style controls back into the sidebar"
+                                            : "Float the style controls over the preview"}
+                                        aria-label={styleFloating ? "Dock style controls" : "Float style controls"}
+                                        className={cn(
+                                            "flex size-7 shrink-0 items-center justify-center rounded-lg border transition-all",
+                                            styleFloating
+                                                ? cn(ACCENT_ON, "border-transparent")
+                                                : "border-border/40 bg-muted/60 text-muted-foreground hover:text-foreground",
+                                        )}
+                                    >
+                                        {styleFloating
+                                            ? <PictureInPicture2 className="size-3.5" />
+                                            : <PictureInPicture className="size-3.5" />}
+                                    </button>
+                                )}
                             </div>
 
                             {/* Tab content — `flex-1 min-h-0` confines the inner
@@ -808,11 +825,23 @@ export function VideoEditorModal({
                                 the tab bar itself stays pinned at the top. */}
                             <div className="flex-1 min-h-0 flex flex-col">
                             {sidebarTab === "style" && (
-                                <SubtitleStylePanel
-                                    config={styleConfig}
-                                    onChange={updateStyleConfig}
-                                    embedded
-                                />
+                                styleFloating ? (
+                                    <div className="flex flex-1 flex-col items-center justify-center gap-3 px-6 text-center">
+                                        <PictureInPicture2 className="size-6 text-muted-foreground/50" />
+                                        <p className="text-xs text-muted-foreground">
+                                            Style controls are floating over the preview.
+                                        </p>
+                                        <Button variant="secondary" size="sm" onClick={() => setStyleFloating(false)}>
+                                            Dock them here
+                                        </Button>
+                                    </div>
+                                ) : (
+                                    <SubtitleStylePanel
+                                        config={styleConfig}
+                                        onChange={updateStyleConfig}
+                                        embedded
+                                    />
+                                )
                             )}
 
                             {/* Cues tab */}
@@ -1034,9 +1063,9 @@ export function VideoEditorModal({
 
 
 
-            {/* Floating style panel for trim/crop modes with "Include Subtitles" on */}
+            {/* The Style tab's controls, popped out over the preview. */}
             <AnimatePresence>
-                {stylePanelApplies && stylePanelOpen && (
+                {styleIsFloating && (
                     <motion.div
                         key="style-panel-float"
                         initial={{ opacity: 0, scale: 0.94 }}
@@ -1049,7 +1078,7 @@ export function VideoEditorModal({
                             <SubtitleStylePanel
                                 config={styleConfig}
                                 onChange={updateStyleConfig}
-                                onClose={() => setStylePanelOpen(false)}
+                                onClose={() => setStyleFloating(false)}
                             />
                         </div>
                     </motion.div>
