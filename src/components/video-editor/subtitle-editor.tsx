@@ -21,6 +21,7 @@ import {
     Trash2,
     FoldVertical,
     UnfoldVertical,
+    Gauge,
 } from "lucide-react";
 import {
     Subtitle,
@@ -44,6 +45,7 @@ import {
 } from "./subtitle-types";
 import { motion, AnimatePresence } from "framer-motion";
 import { hintForEvent, FLASH_MS, type HintId } from "./shortcut-hints";
+import { assessCue, describeIssues } from "./cue-quality";
 import { ACCENT_ON, ACCENT_OFF } from "./accent";
 
 /** The two controls that sit on the boundary between one cue and the next. */
@@ -779,6 +781,12 @@ export function SubtitleEditor({
                             // Split cuts at the playhead, so it is only
                             // meaningful while the playhead is inside this cue
                             // with room to leave a usable cue on each side.
+                            // Readability, as distinct from the confidence
+                            // triangle: that one asks whether the words are
+                            // right, this asks whether the cue can be read at
+                            // the speed it goes past.
+                            const quality = assessCue(subtitle);
+                            const qualityNote = describeIssues(quality);
                             const canSplitHere =
                                 currentTime > parseSrtTime(subtitle.start) + MIN_CUE_SECONDS &&
                                 currentTime < parseSrtTime(subtitle.end) - MIN_CUE_SECONDS;
@@ -795,7 +803,12 @@ export function SubtitleEditor({
                                         "group relative rounded-lg p-2.5 cursor-pointer transition-all duration-200 border",
                                         isActive
                                             ? "bg-muted border-border shadow-sm"
-                                            : "bg-transparent border-transparent hover:bg-muted/50 hover:border-border/60"
+                                            : "bg-transparent border-transparent hover:bg-muted/50 hover:border-border/60",
+                                        // Drawn as a border rather than an added
+                                        // element: 300 rows can be scanned for
+                                        // problems without reading any of them,
+                                        // and nothing reflows when one appears.
+                                        qualityNote && "border-l-2 border-l-chart-3/70",
                                     )}
                                 >
                                     <div className="flex items-center justify-between mb-1.5">
@@ -813,6 +826,15 @@ export function SubtitleEditor({
                                             />
                                         </div>
                                         <div className="flex items-center gap-1.5">
+                                            {qualityNote && (
+                                                <span
+                                                    className="hidden items-center gap-0.5 font-mono text-[9px] tabular-nums text-chart-3/90 group-hover:flex"
+                                                    title={qualityNote}
+                                                >
+                                                    <Gauge className="size-3" />
+                                                    {Math.round(quality.cps)}
+                                                </span>
+                                            )}
                                             {isLowConfidence && (
                                                 <span className="flex items-center gap-0.5 text-chart-3/80" title="Low confidence — review recommended">
                                                     <AlertTriangle className="w-3 h-3" />
