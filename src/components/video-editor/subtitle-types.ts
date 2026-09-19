@@ -253,6 +253,74 @@ export function mergeCueWithNext(
     };
 }
 
+/**
+ * Split a cue in two at `atSeconds`.
+ *
+ * The transcription produces long cues freely — 304 of them run past seven
+ * seconds in a 4.5-hour transcript, the worst 34.9s — and a subtitle that sits
+ * on screen for half a minute is not a subtitle. This is the operation that
+ * breaks them up.
+ *
+ * The text is divided at the word boundary nearest the same fraction of the
+ * way through, so a cue cut at its midpoint gets roughly half its words rather
+ * than a split mid-word. Both halves keep the original's confidence: splitting
+ * says nothing about whether the transcription was right.
+ *
+ * Returns null unless the point falls strictly inside the cue with room for a
+ * usable cue on each side.
+ */
+export function splitCueAt(
+    subtitles: Subtitle[],
+    id: number,
+    atSeconds: number,
+): { subtitles: Subtitle[]; activeId: number } | null {
+    const index = subtitles.findIndex((s) => s.id === id);
+    if (index === -1) return null;
+
+    const cue = subtitles[index];
+    const start = parseSrtTime(cue.start);
+    const end = parseSrtTime(cue.end);
+    if (!(atSeconds > start + MIN_CUE_SECONDS && atSeconds < end - MIN_CUE_SECONDS)) return null;
+
+    const words = cue.text.trim().split(/\s+/).filter(Boolean);
+    const ratio = (atSeconds - start) / (end - start);
+
+    let firstText = cue.text.trim();
+    let secondText = "";
+    if (words.length > 1) {
+        // Round rather than floor so a cut just past halfway takes the word it
+        // is standing on, and clamp so neither half is left empty.
+        const cutAt = Math.min(words.length - 1, Math.max(1, Math.round(words.length * ratio)));
+        firstText = words.slice(0, cutAt).join(" ");
+        secondText = words.slice(cutAt).join(" ");
+    }
+
+    const first: Subtitle = {
+        id: cue.id,
+        start: cue.start,
+        end: formatSrtTime(atSeconds),
+        text: firstText,
+        confidence: cue.confidence,
+    };
+    const second: Subtitle = {
+        id: cue.id + 1,
+        start: formatSrtTime(atSeconds),
+        end: cue.end,
+        text: secondText,
+        confidence: cue.confidence,
+    };
+
+    const out = [...subtitles];
+    out.splice(index, 1, first, second);
+
+    return {
+        subtitles: out.map((s, i) => ({ ...s, id: i + 1 })),
+        // The second half is what the user is about to read or retype, and the
+        // playhead is already sitting at its start.
+        activeId: index + 2,
+    };
+}
+
 /** Clip subtitles to a time range and shift timestamps so trimStart becomes 0 */
 export function clipAndShiftSubtitles(
     subtitles: Subtitle[],
