@@ -514,7 +514,25 @@ export function VideoEditorModal({
      * practice it put a panel over the frame in the two modes where the frame
      * is the thing being worked on.
      */
-    const styleIsFloating = mode === "subtitles" && sidebarTab === "style" && styleFloating;
+    const styleIsFloating = mode === "subtitles" && styleFloating;
+
+    /**
+     * Float the Style controls, and hand the sidebar to Cues.
+     *
+     * Leaving the sidebar parked on an empty Style tab was the whole problem:
+     * the panel moved out but the space it vacated stayed reserved for it.
+     * Popping it out is a request for room, so the room goes to the only other
+     * thing that wants it, at full height.
+     */
+    const floatStyle = useCallback(() => {
+        setStyleFloating(true);
+        setSidebarTab("cues");
+    }, []);
+
+    const dockStyle = useCallback(() => {
+        setStyleFloating(false);
+        setSidebarTab("style");
+    }, []);
 
     // Every export re-encodes now — trims included, so a cut lands exactly
     // where it is placed — which means the quality choice always applies and
@@ -563,8 +581,16 @@ export function VideoEditorModal({
      * window, which on a narrow window is roughly half the space it should have.
      */
     const subtitlePanelOpen = useMemo(
-        () => ({ width: isStacked ? "100%" : 320, height: isStacked ? "45vh" : "100%", opacity: 1 }),
-        [isStacked],
+        () => ({
+            width: isStacked ? "100%" : 320,
+            // Stacked, the panel is capped so the video above it stays worth
+            // looking at. Floating the Style controls changes that bargain:
+            // they are over the video now, and the sidebar has one tab left,
+            // so the cue list gets the height the cap was protecting.
+            height: isStacked ? (styleFloating ? "68vh" : "45vh") : "100%",
+            opacity: 1,
+        }),
+        [isStacked, styleFloating],
     );
     const subtitlePanelClosed = useMemo(
         () => ({ width: isStacked ? "100%" : 0, height: isStacked ? 0 : "100%", opacity: 0 }),
@@ -780,16 +806,31 @@ export function VideoEditorModal({
                                     {([
                                         { id: "style", label: "Style", Icon: Palette  },
                                         { id: "cues",  label: "Cues",  Icon: Captions },
-                                    ] as const).map(({ id, label, Icon }) => (
-                                        <button
-                                            key={id}
-                                            onClick={() => setSidebarTab(id)}
-                                            className={cn(PILL_BASE, "flex-1 justify-center", sidebarTab === id ? PILL_ON : PILL_OFF)}
-                                        >
-                                            <Icon className="w-3.5 h-3.5" />
-                                            {label}
-                                        </button>
-                                    ))}
+                                    ] as const).map(({ id, label, Icon }) => {
+                                        // While Style is floating its tab is not
+                                        // a place to go — it is a way back. The
+                                        // pill says where the controls are and
+                                        // brings them home.
+                                        const isFloatingTab = id === "style" && styleFloating;
+                                        return (
+                                            <button
+                                                key={id}
+                                                onClick={() => (isFloatingTab ? dockStyle() : setSidebarTab(id))}
+                                                title={isFloatingTab ? "Style is floating — click to dock it" : undefined}
+                                                className={cn(
+                                                    PILL_BASE,
+                                                    "flex-1 justify-center",
+                                                    sidebarTab === id && !isFloatingTab ? PILL_ON : PILL_OFF,
+                                                    isFloatingTab && "italic",
+                                                )}
+                                            >
+                                                {isFloatingTab
+                                                    ? <PictureInPicture2 className="w-3.5 h-3.5" />
+                                                    : <Icon className="w-3.5 h-3.5" />}
+                                                {label}
+                                            </button>
+                                        );
+                                    })}
                                 </div>
                                 {/* Pops the Style controls out over the preview.
                                     Lives here rather than in the header because
@@ -797,10 +838,10 @@ export function VideoEditorModal({
                                     in trim and crop — where it used to live —
                                     it covered the frame those modes exist to
                                     work on. */}
-                                {sidebarTab === "style" && (
+                                {(
                                     <button
                                         type="button"
-                                        onClick={() => setStyleFloating((f) => !f)}
+                                        onClick={() => (styleFloating ? dockStyle() : floatStyle())}
                                         aria-pressed={styleFloating}
                                         title={styleFloating
                                             ? "Dock the style controls back into the sidebar"
@@ -824,24 +865,12 @@ export function VideoEditorModal({
                                 scroll area to the space below the tab bar, so
                                 the tab bar itself stays pinned at the top. */}
                             <div className="flex-1 min-h-0 flex flex-col">
-                            {sidebarTab === "style" && (
-                                styleFloating ? (
-                                    <div className="flex flex-1 flex-col items-center justify-center gap-3 px-6 text-center">
-                                        <PictureInPicture2 className="size-6 text-muted-foreground/50" />
-                                        <p className="text-xs text-muted-foreground">
-                                            Style controls are floating over the preview.
-                                        </p>
-                                        <Button variant="secondary" size="sm" onClick={() => setStyleFloating(false)}>
-                                            Dock them here
-                                        </Button>
-                                    </div>
-                                ) : (
-                                    <SubtitleStylePanel
-                                        config={styleConfig}
-                                        onChange={updateStyleConfig}
-                                        embedded
-                                    />
-                                )
+                            {sidebarTab === "style" && !styleFloating && (
+                                <SubtitleStylePanel
+                                    config={styleConfig}
+                                    onChange={updateStyleConfig}
+                                    embedded
+                                />
                             )}
 
                             {/* Cues tab */}
@@ -1078,7 +1107,7 @@ export function VideoEditorModal({
                             <SubtitleStylePanel
                                 config={styleConfig}
                                 onChange={updateStyleConfig}
-                                onClose={() => setStyleFloating(false)}
+                                onClose={dockStyle}
                             />
                         </div>
                     </motion.div>
