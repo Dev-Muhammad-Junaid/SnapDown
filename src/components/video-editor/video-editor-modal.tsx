@@ -72,6 +72,26 @@ function subscribeStacked(onChange: () => void) {
     return () => mql.removeEventListener("change", onChange);
 }
 
+/**
+ * Viewport height, tracked so a layout can be sized against it in pixels.
+ *
+ * Motion animates numbers, not CSS expressions: handing it
+ * `max(220px, min(68vh, calc(100vh - 452px)))` does not clamp, it collapses
+ * the element to nothing. The arithmetic has to happen here.
+ */
+function subscribeViewport(onChange: () => void) {
+    window.addEventListener("resize", onChange);
+    return () => window.removeEventListener("resize", onChange);
+}
+
+function useViewportHeight(): number {
+    return useSyncExternalStore(
+        subscribeViewport,
+        () => window.innerHeight,
+        () => 800, // No window on the server; any sane default will do.
+    );
+}
+
 function useIsStacked(): boolean {
     return useSyncExternalStore(
         subscribeStacked,
@@ -580,17 +600,49 @@ export function VideoEditorModal({
      * pinned at the 320px it had been given as a sidebar instead of spanning the
      * window, which on a narrow window is roughly half the space it should have.
      */
+    /**
+     * How tall the sidebar may be when it shares a column with the preview.
+     *
+     * Every pixel it takes comes straight out of the video. Floating the Style
+     * controls earns it a larger share — they are over the video now and only
+     * one tab is left — but not an unlimited one: measured on this layout the
+     * fixed chrome around both is 201px and the preview needs ~250px to show a
+     * frame rather than a sliver, so the sidebar can never exceed
+     * `viewport - 452`. Without that second limit, floating at 480x820 left
+     * 28px of video.
+     *
+     * On a short window the ceiling does all the work and floating gains
+     * nothing, which is the honest answer — there was no spare room to give.
+     * On a tall one the percentage governs and the cue list grows.
+     */
+    const viewportHeight = useViewportHeight();
+    const stackedPanelHeight = useMemo(() => {
+        const share = viewportHeight * (styleFloating ? 0.68 : 0.45);
+        const ceiling = viewportHeight - 452;
+        return Math.round(Math.max(220, Math.min(share, ceiling)));
+    }, [viewportHeight, styleFloating]);
+
     const subtitlePanelOpen = useMemo(
         () => ({
             width: isStacked ? "100%" : 320,
-            // Stacked, the panel is capped so the video above it stays worth
-            // looking at. Floating the Style controls changes that bargain:
-            // they are over the video now, and the sidebar has one tab left,
-            // so the cue list gets the height the cap was protecting.
-            height: isStacked ? (styleFloating ? "68vh" : "45vh") : "100%",
+            // Stacked, the sidebar and the preview share one column, so every
+            // pixel it takes comes straight out of the video.
+            //
+            // Floating the Style controls earns the sidebar more of that share
+            // — they are over the video now and only one tab is left — but the
+            // share is not unlimited. Measured on this layout, the fixed chrome
+            // around both is 201px and the preview needs ~250px to show a frame
+            // rather than a sliver, so the sidebar can never exceed
+            // `100vh - 452px` however much it would like to. Without that
+            // second limit, floating at 480x820 left 28px of video.
+            //
+            // On a short window the cap does all the work and floating gains
+            // nothing, which is the correct answer: there was no spare room to
+            // give. On a tall one the percentage governs and the cue list grows.
+            height: isStacked ? stackedPanelHeight : "100%",
             opacity: 1,
         }),
-        [isStacked, styleFloating],
+        [isStacked, stackedPanelHeight],
     );
     const subtitlePanelClosed = useMemo(
         () => ({ width: isStacked ? "100%" : 0, height: isStacked ? 0 : "100%", opacity: 0 }),
