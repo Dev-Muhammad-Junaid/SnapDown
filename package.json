@@ -25,7 +25,7 @@
     "test:watch": "vitest",
     "test:smoke": "node tests/smoke.mjs",
     "electron:dev": "concurrently -k -n NEXT,ELECTRON -c blue,magenta \"npm run dev\" \"wait-on http://localhost:3000 && electron .\"",
-    "electron:build": "npm run build && npm run rebuild:electron && node scripts/sync-electron-sqlite-binary.cjs && node scripts/finalize-standalone.cjs && electron-builder --mac",
+    "electron:build": "npm run build && npm run rebuild:electron && node scripts/sync-electron-sqlite-binary.cjs && node scripts/finalize-standalone.cjs && bash scripts/electron-build.sh",
     "postelectron:build": "npm run rebuild:node",
     "rebuild:electron": "electron-rebuild -f -w better-sqlite3",
     "rebuild:node": "npm rebuild better-sqlite3",
@@ -46,14 +46,22 @@
         "from": ".next/standalone-wrapped",
         "to": ".",
         "filter": [
-          "**/*"
+          "**/*",
+          "!**/obj.target/**",
+          "!**/*.o",
+          "!**/*.a",
+          "!**/*.d"
         ]
       }
     ],
     "mac": {
       "icon": "build/icon.icns",
       "category": "public.app-category.utilities",
-      "identity": null,
+      "hardenedRuntime": true,
+      "gatekeeperAssess": false,
+      "entitlements": "build/entitlements.mac.plist",
+      "entitlementsInherit": "build/entitlements.mac.plist",
+      "notarize": false,
       "target": [
         "dmg",
         "dir"

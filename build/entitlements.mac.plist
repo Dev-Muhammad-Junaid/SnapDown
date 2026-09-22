@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!--
+      The hardened runtime is required for notarization, and it switches off
+      several things Electron and this app genuinely need. Each exception below
+      is the narrowest one that keeps a specific part working; none of them is
+      here "to be safe".
+    -->
+
+    <!-- V8 compiles JavaScript to machine code at runtime. Without these two,
+         the renderer cannot start at all. -->
+    <key>com.apple.security.cs.allow-jit</key>
+    <true/>
+    <key>com.apple.security.cs.allow-unsigned-executable-memory</key>
+    <true/>
+
+    <!-- The Next.js server runs as a child process configured through the
+         environment (PORT, APP_FFMPEG_PATH, the Keychain lookups). The hardened
+         runtime otherwise strips DYLD_* and related variables from children. -->
+    <key>com.apple.security.cs.allow-dyld-environment-variables</key>
+    <true/>
+
+    <!-- better-sqlite3 and sharp load as unsigned-at-build-time native modules,
+         and ffmpeg/ffprobe are spawned from inside the bundle. Library
+         validation would refuse all of them for not sharing our team id. -->
+    <key>com.apple.security.cs.disable-library-validation</key>
+    <true/>
+</dict>
+</plist>
