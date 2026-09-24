@@ -51,6 +51,52 @@ function firstReadable(paths: string[]): string | null {
     return null;
 }
 
+/**
+ * Why a browser's cookies are unavailable, which is not the same question as
+ * whether they are.
+ *
+ * macOS returns EPERM, not ENOENT, for another app's data when the caller has
+ * not been granted access — and a plain directory listing comes back empty
+ * rather than erroring, so "no cookies here" and "not allowed to look" are
+ * easy to confuse. They need opposite advice: one means pick another browser,
+ * the other means grant the app Full Disk Access. Telling someone their daily
+ * browser has no cookies when the truth is we were not allowed to look sends
+ * them somewhere with no fix in it.
+ */
+export type CookieUnavailableReason = "missing" | "denied";
+
+export function cookieUnavailableReason(
+    browserSpec: string,
+    home: string = os.homedir(),
+): CookieUnavailableReason {
+    const browser = browserSpec.split(":")[0].trim().toLowerCase();
+    const roots: string[] = [];
+
+    if (browser === "safari") {
+        roots.push(path.join(home, "Library", "Cookies"));
+        roots.push(path.join(home, "Library", "Containers", "com.apple.Safari", "Data",
+                             "Library", "Cookies"));
+    } else if (browser === "firefox") {
+        roots.push(path.join(home, "Library", "Application Support", "Firefox", "Profiles"));
+    } else if (CHROMIUM_ROOTS[browser]) {
+        roots.push(path.join(home, "Library", "Application Support", CHROMIUM_ROOTS[browser]));
+    }
+
+    for (const root of roots) {
+        try {
+            fs.readdirSync(root);
+        } catch (err) {
+            // The directory is there and we are not allowed to read it: the
+            // browser's data exists, we simply cannot see it. macOS's privacy
+            // layer denies with EPERM and ordinary permission bits with
+            // EACCES; both mean the same thing to a user.
+            const code = (err as NodeJS.ErrnoException).code;
+            if (code === "EPERM" || code === "EACCES") return "denied";
+        }
+    }
+    return "missing";
+}
+
 /** Cookie stores inside a Chromium profile tree, one per profile. */
 function chromiumCookieStores(root: string): string[] {
     const out: string[] = [];

@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import fs from "fs";
 import os from "os";
 import path from "path";
-import { findBrowserCookieStore, browserHasNoCookies } from "@/lib/browser-cookies";
+import { findBrowserCookieStore, browserHasNoCookies, cookieUnavailableReason } from "@/lib/browser-cookies";
 
 /**
  * Downloads were failing outright with "could not find chrome cookies database
@@ -115,5 +115,26 @@ describe("browserHasNoCookies", () => {
     it("never claims certainty about a browser it does not know", () => {
         // Guessing wrong here would strip cookies yt-dlp could have used.
         expect(browserHasNoCookies("some-new-browser", home)).toBe(false);
+    });
+});
+
+describe("cookieUnavailableReason", () => {
+    it("reports a browser that was never installed as missing", () => {
+        expect(cookieUnavailableReason("chrome", home)).toBe("missing");
+    });
+
+    it("reports a present but unreadable directory as denied", () => {
+        // macOS returns EPERM for another app's data when access has not been
+        // granted, and a denied listing looks empty rather than failing — so
+        // "no cookies" and "not allowed to look" are easy to confuse. They
+        // need opposite advice.
+        const dir = path.join(home, "Library", "Application Support", "Google", "Chrome");
+        fs.mkdirSync(dir, { recursive: true });
+        fs.chmodSync(dir, 0o000);
+        try {
+            expect(cookieUnavailableReason("chrome", home)).toBe("denied");
+        } finally {
+            fs.chmodSync(dir, 0o700);
+        }
     });
 });

@@ -1,7 +1,7 @@
 import fs from "fs";
 import { appDataPath } from "@/lib/app-paths";
 import { isKeychainAvailable, readSecret, writeSecret, deleteSecret } from "@/lib/secrets";
-import { browserHasNoCookies } from "@/lib/browser-cookies";
+import { browserHasNoCookies, cookieUnavailableReason } from "@/lib/browser-cookies";
 
 const SETTINGS_FILE = appDataPath(".server_settings.json");
 
@@ -219,10 +219,16 @@ export function getYtdlpCookieArgs(): string[] {
     if (browserHasNoCookies(browser)) {
         if (!warnedAboutBrowser.has(browser)) {
             warnedAboutBrowser.add(browser);
+            // The two causes need opposite advice, and macOS makes them look
+            // alike: a denied directory lists as empty rather than erroring.
+            const advice = cookieUnavailableReason(browser) === "denied"
+                ? `macOS is not letting SnapDown read ${browser}'s data. Grant SnapDown ` +
+                  `Full Disk Access in System Settings → Privacy & Security, then restart it.`
+                : `No cookie store was found for ${browser}. Pick another browser in ` +
+                  `Settings, or clear the option.`;
             console.warn(
-                `[Settings] Cookies are set to "${browser}", but no cookie store was found for it. ` +
-                `Downloading without cookies — some videos may be blocked or capped in quality. ` +
-                `Pick another browser in Settings, or clear the option.`,
+                `[Settings] Cookies are set to "${browser}" but cannot be read. ${advice} ` +
+                `Downloading without cookies — some videos may be blocked or capped in quality.`,
             );
         }
         return [];
