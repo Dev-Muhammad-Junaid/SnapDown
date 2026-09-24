@@ -10,7 +10,6 @@ export interface SnapDownDesktop {
     };
     system: {
         openFullDiskAccess: () => Promise<{ opened: boolean }>;
-        revealApp: () => Promise<{ revealed: boolean; path: string | null }>;
     };
 }
 

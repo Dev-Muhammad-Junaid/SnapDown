@@ -49,11 +49,5 @@ contextBridge.exposeInMainWorld("snapdown", {
          *  arbitrary URL handlers. The destination is fixed in the main
          *  process instead, so this call can only ever do the one thing. */
         openFullDiskAccess: () => ipcRenderer.invoke("system:open-full-disk-access"),
-
-        /** Reveals SnapDown.app in Finder.
-         *
-         *  Needed because granting access means dragging the app into the
-         *  list, and the app is not always in /Applications. */
-        revealApp: () => ipcRenderer.invoke("system:reveal-app"),
     },
 });

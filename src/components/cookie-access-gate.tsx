@@ -68,7 +68,6 @@ export function CookieAccessGate() {
             open={open}
             browser={access.browser}
             dismissible
-            onRecheck={refresh}
             onClose={(dontAskAgain) => {
                 setOpen(false);
                 closedThisSession.current = true;

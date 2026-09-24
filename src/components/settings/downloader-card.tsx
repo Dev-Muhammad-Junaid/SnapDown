@@ -103,9 +103,8 @@ export function DownloaderCard({ ytCookiesBrowser, setYtCookiesBrowser, onSave }
                         <div className="min-w-0 flex-1 space-y-2">
                             <p className="text-[12.5px] leading-relaxed text-amber-700 dark:text-amber-400">
                                 macOS is blocking SnapDown from reading{" "}
-                                {BROWSER_LABELS[access!.browser] ?? access!.browser}&rsquo;s cookies.
-                                Downloads will be refused or capped in quality until SnapDown has
-                                Full Disk Access.
+                                {BROWSER_LABELS[access!.browser] ?? access!.browser}.
+                                Downloads will be capped or refused until it has Full Disk Access.
                             </p>
                             <Button
                                 size="sm"
@@ -133,7 +132,6 @@ export function DownloaderCard({ ytCookiesBrowser, setYtCookiesBrowser, onSave }
                     open={dialogOpen}
                     browser={access.browser}
                     dismissible={false}
-                    onRecheck={refresh}
                     onClose={() => setDialogOpen(false)}
                 />
             )}

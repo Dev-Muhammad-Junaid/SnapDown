@@ -375,14 +375,6 @@ if (!app.requestSingleInstanceLock()) {
             return { opened: false };
         });
 
-        ipcMain.handle("system:reveal-app", () => {
-            // null when running from a dev checkout rather than an installed
-            // bundle; the renderer says so instead of silently doing nothing.
-            const bundle = resolveAppBundlePath();
-            if (!bundle) return { revealed: false, path: null };
-            shell.showItemInFolder(bundle);
-            return { revealed: true, path: bundle };
-        });
 
         app.on("activate", () => {
             // Re-opening from the Dock still has to re-check the server (the
