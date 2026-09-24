@@ -349,6 +349,41 @@ if (!app.requestSingleInstanceLock()) {
             return result;
         });
 
+        // Full Disk Access. Reading another browser's cookie store needs it,
+        // and it is the one privacy category macOS never prompts for: the
+        // system will not ask on first access the way it does for Documents or
+        // the camera, so an app that needs it can only point the user at the
+        // list and ask them to add it. These two handlers are that pointer.
+        ipcMain.handle("system:open-full-disk-access", async () => {
+            // The pane moved when System Settings replaced System Preferences
+            // in macOS 13. Both forms are tried because an unrecognised anchor
+            // is not an error — it opens the app at whatever pane it likes —
+            // so there is no way to detect the wrong one and correct it after
+            // the fact. Newest first, oldest as the fallback.
+            const panes = [
+                "x-apple.systempreferences:com.apple.settings.PrivacySecurity.extension?Privacy_AllFiles",
+                "x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles",
+            ];
+            for (const url of panes) {
+                try {
+                    await shell.openExternal(url);
+                    return { opened: true };
+                } catch (err) {
+                    console.error(`[SnapDown] could not open ${url}: ${err.message}`);
+                }
+            }
+            return { opened: false };
+        });
+
+        ipcMain.handle("system:reveal-app", () => {
+            // null when running from a dev checkout rather than an installed
+            // bundle; the renderer says so instead of silently doing nothing.
+            const bundle = resolveAppBundlePath();
+            if (!bundle) return { revealed: false, path: null };
+            shell.showItemInFolder(bundle);
+            return { revealed: true, path: bundle };
+        });
+
         app.on("activate", () => {
             // Re-opening from the Dock still has to re-check the server (the
             // two can outlive each other) but must NOT reload a window that is

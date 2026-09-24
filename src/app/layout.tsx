@@ -33,6 +33,7 @@ import { AppToolbar } from "@/components/app-toolbar";
 import { ErrorBoundary } from "@/components/error-boundary";
 import { OnboardingModal } from "@/components/onboarding-modal";
 import { PlatformClass } from "@/components/platform-class";
+import { CookieAccessGate } from "@/components/cookie-access-gate";
 
 export default function RootLayout({
   children,
@@ -75,6 +76,7 @@ export default function RootLayout({
             </SidebarProvider>
             <Toaster />
             <OnboardingModal />
+            <CookieAccessGate />
           </TooltipProvider>
         </ThemeProvider>
       </body>

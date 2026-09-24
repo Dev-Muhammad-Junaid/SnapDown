@@ -8,6 +8,10 @@ export interface SnapDownDesktop {
         onProgress: (cb: (p: { received: number; total: number }) => void) => () => void;
         onStatus: (cb: (s: { phase: string; version?: string; size?: number }) => void) => () => void;
     };
+    system: {
+        openFullDiskAccess: () => Promise<{ opened: boolean }>;
+        revealApp: () => Promise<{ revealed: boolean; path: string | null }>;
+    };
 }
 
 declare global {

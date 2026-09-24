@@ -20,6 +20,9 @@ import { cn } from "@/lib/utils";
 
 const STORAGE_KEY = "snapdown_onboarding_seen";
 
+/** Fired when the tour is dismissed, however it was dismissed. */
+export const ONBOARDING_CLOSED_EVENT = "snapdown:onboarding-closed";
+
 const slides = [
     {
         icon: Sparkles,
@@ -71,6 +74,11 @@ export function OnboardingModal() {
     const close = () => {
         setOpen(false);
         try { localStorage.setItem(STORAGE_KEY, "true"); } catch { }
+        // Anything that holds itself back so as not to stack a second dialog on
+        // top of the tour needs to know the tour is over. Without this the
+        // Full Disk Access prompt, skipped on first launch for exactly that
+        // reason, would not appear until the launch after.
+        window.dispatchEvent(new Event(ONBOARDING_CLOSED_EVENT));
     };
 
     const isLast = step === slides.length - 1;

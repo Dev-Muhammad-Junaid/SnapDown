@@ -163,3 +163,26 @@ export function browserHasNoCookies(browserSpec: string, home?: string): boolean
     if (!known) return false;
     return findBrowserCookieStore(browserSpec, home) === null;
 }
+
+/**
+ * The full answer for the UI: usable, blocked, or genuinely absent.
+ *
+ * The UI needs the three-way distinction because only one of them is
+ * actionable by the user, and the action is not obvious: Full Disk Access is
+ * the one macOS privacy category that never prompts. Nothing the app can do
+ * will make the system ask — no first read, no API call, no entitlement. The
+ * grant only happens if the user is told to go and make it, which means
+ * "denied" has to travel all the way to a dialog with a button in it rather
+ * than dying in a server log.
+ */
+export type CookieAccessStatus = "off" | "ok" | "denied" | "missing";
+
+export function cookieAccessStatus(
+    browserSpec: string,
+    home?: string,
+): CookieAccessStatus {
+    const browser = browserSpec.split(":")[0].trim().toLowerCase();
+    if (!browser) return "off";
+    if (!browserHasNoCookies(browserSpec, home)) return "ok";
+    return cookieUnavailableReason(browserSpec, home);
+}

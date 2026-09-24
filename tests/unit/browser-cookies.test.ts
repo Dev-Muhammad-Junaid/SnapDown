@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import fs from "fs";
 import os from "os";
 import path from "path";
-import { findBrowserCookieStore, browserHasNoCookies, cookieUnavailableReason } from "@/lib/browser-cookies";
+import { findBrowserCookieStore, browserHasNoCookies, cookieUnavailableReason, cookieAccessStatus } from "@/lib/browser-cookies";
 
 /**
  * Downloads were failing outright with "could not find chrome cookies database
@@ -136,5 +136,41 @@ describe("cookieUnavailableReason", () => {
         } finally {
             fs.chmodSync(dir, 0o700);
         }
+    });
+});
+
+describe("cookieAccessStatus", () => {
+    it("is off when no browser is configured", () => {
+        expect(cookieAccessStatus("", home)).toBe("off");
+        expect(cookieAccessStatus("   ", home)).toBe("off");
+    });
+
+    it("is ok once a readable store exists", () => {
+        make(...appSupport, "Google", "Chrome", "Default", "Cookies");
+        expect(cookieAccessStatus("chrome", home)).toBe("ok");
+    });
+
+    it("is missing when the browser left nothing behind", () => {
+        expect(cookieAccessStatus("chrome", home)).toBe("missing");
+    });
+
+    it("is denied when the data is there and we may not read it", () => {
+        // The case the user actually hit: Chrome in daily use, 85 profile
+        // directories, and a status of "missing" would have sent them to
+        // change a setting that was never wrong.
+        const dir = path.join(home, ...appSupport, "Google", "Chrome");
+        fs.mkdirSync(path.join(dir, "Default"), { recursive: true });
+        fs.writeFileSync(path.join(dir, "Default", "Cookies"), "");
+        fs.chmodSync(dir, 0o000);
+        try {
+            expect(cookieAccessStatus("chrome", home)).toBe("denied");
+        } finally {
+            fs.chmodSync(dir, 0o700);
+        }
+    });
+
+    it("does not claim denial for a browser whose layout we do not know", () => {
+        // "ok" here means "let yt-dlp decide", not "we verified it".
+        expect(cookieAccessStatus("some-new-browser", home)).toBe("ok");
     });
 });
