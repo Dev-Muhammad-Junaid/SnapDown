@@ -1,0 +1,109 @@
+import fs from "fs";
+import os from "os";
+import path from "path";
+
+/**
+ * Whether the browser a user picked for cookies actually has any.
+ *
+ * yt-dlp's `--cookies-from-browser` is fatal when it comes up empty: it aborts
+ * the download with "could not find chrome cookies database in ...", and the
+ * user sees a failed job rather than a video. That is the wrong trade. Cookies
+ * are an enhancement — they get past YouTube's bot check and unlock higher
+ * formats — so when they are unavailable the right move is to download without
+ * them, not to refuse.
+ *
+ * The failure is easy to reach by accident. Uninstalling Chrome leaves
+ * `~/Library/Application Support/Google/Chrome` behind as an empty directory,
+ * so the setting still names a browser that looks present and has nothing in
+ * it. On the machine this was found on, every one of Chrome, Brave, Edge,
+ * Chromium, Arc and Vivaldi had a directory and none had a cookie store.
+ */
+
+/** Where each browser keeps cookies on macOS, relative to Application Support.
+ *  Chromium-family browsers keep one per profile directory. */
+const CHROMIUM_ROOTS: Record<string, string> = {
+    chrome: "Google/Chrome",
+    "chrome-beta": "Google/Chrome Beta",
+    chromium: "Chromium",
+    brave: "BraveSoftware/Brave-Browser",
+    edge: "Microsoft Edge",
+    vivaldi: "Vivaldi",
+    opera: "com.operasoftware.Opera",
+    arc: "Arc",
+};
+
+function firstExisting(paths: string[]): string | null {
+    for (const p of paths) {
+        try {
+            if (fs.existsSync(p)) return p;
+        } catch { /* unreadable is the same as absent for our purposes */ }
+    }
+    return null;
+}
+
+/** Cookie stores inside a Chromium profile tree, one per profile. */
+function chromiumCookieStores(root: string): string[] {
+    const out: string[] = [];
+    let entries: fs.Dirent[];
+    try {
+        entries = fs.readdirSync(root, { withFileTypes: true });
+    } catch {
+        return out;
+    }
+    for (const entry of entries) {
+        if (!entry.isDirectory()) continue;
+        // Newer Chrome keeps it under Network/, older versions at the top.
+        out.push(path.join(root, entry.name, "Network", "Cookies"));
+        out.push(path.join(root, entry.name, "Cookies"));
+    }
+    return out;
+}
+
+/**
+ * Locate the cookie store for a browser, or null when it has none.
+ *
+ * Accepts yt-dlp's `browser:profile` form; the profile part is ignored here
+ * because the question being asked is only whether this browser has cookies at
+ * all. yt-dlp still does the precise lookup itself.
+ */
+export function findBrowserCookieStore(
+    browserSpec: string,
+    home: string = os.homedir(),
+): string | null {
+    const browser = browserSpec.split(":")[0].trim().toLowerCase();
+    if (!browser) return null;
+
+    const appSupport = path.join(home, "Library", "Application Support");
+
+    if (browser === "safari") {
+        return firstExisting([
+            path.join(home, "Library", "Cookies", "Cookies.binarycookies"),
+            path.join(home, "Library", "Containers", "com.apple.Safari", "Data",
+                      "Library", "Cookies", "Cookies.binarycookies"),
+        ]);
+    }
+
+    if (browser === "firefox") {
+        const profiles = path.join(appSupport, "Firefox", "Profiles");
+        let names: string[];
+        try {
+            names = fs.readdirSync(profiles);
+        } catch {
+            return null;
+        }
+        return firstExisting(names.map((n) => path.join(profiles, n, "cookies.sqlite")));
+    }
+
+    const root = CHROMIUM_ROOTS[browser];
+    if (!root) return null; // Unknown browser: let yt-dlp be the judge.
+    return firstExisting(chromiumCookieStores(path.join(appSupport, root)));
+}
+
+/** Whether we know for certain this browser has no cookies to read. */
+export function browserHasNoCookies(browserSpec: string, home?: string): boolean {
+    const browser = browserSpec.split(":")[0].trim().toLowerCase();
+    // Only claim certainty for browsers whose layout we know.
+    const known = browser === "safari" || browser === "firefox" || browser in CHROMIUM_ROOTS;
+    if (!known) return false;
+    return findBrowserCookieStore(browserSpec, home) === null;
+}

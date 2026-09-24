@@ -1,6 +1,7 @@
 import fs from "fs";
 import { appDataPath } from "@/lib/app-paths";
 import { isKeychainAvailable, readSecret, writeSecret, deleteSecret } from "@/lib/secrets";
+import { browserHasNoCookies } from "@/lib/browser-cookies";
 
 const SETTINGS_FILE = appDataPath(".server_settings.json");
 
@@ -199,11 +200,35 @@ export function getServerSettings(): ServerSettings {
     return settings;
 }
 
+/** Warn once per browser rather than on every probe and download. */
+const warnedAboutBrowser = new Set<string>();
+
 /** yt-dlp args for reading cookies from the configured browser, or [] if off.
  *  Prepend to every yt-dlp invocation (download + metadata/format probes). */
 export function getYtdlpCookieArgs(): string[] {
     const browser = getServerSettings().ytCookiesBrowser?.trim();
-    return browser ? ["--cookies-from-browser", browser] : [];
+    if (!browser) return [];
+
+    // `--cookies-from-browser` is fatal when the store is missing: yt-dlp
+    // aborts with "could not find chrome cookies database in ..." and the job
+    // fails. Cookies are an enhancement — they clear YouTube's bot check and
+    // unlock higher formats — so a missing store should cost you those, not
+    // the download. Uninstalling a browser leaves its Application Support
+    // directory behind, so a setting can name a browser that looks installed
+    // and holds nothing.
+    if (browserHasNoCookies(browser)) {
+        if (!warnedAboutBrowser.has(browser)) {
+            warnedAboutBrowser.add(browser);
+            console.warn(
+                `[Settings] Cookies are set to "${browser}", but no cookie store was found for it. ` +
+                `Downloading without cookies — some videos may be blocked or capped in quality. ` +
+                `Pick another browser in Settings, or clear the option.`,
+            );
+        }
+        return [];
+    }
+
+    return ["--cookies-from-browser", browser];
 }
 
 export function updateServerSetting<K extends keyof ServerSettings>(key: K, value: ServerSettings[K]) {
