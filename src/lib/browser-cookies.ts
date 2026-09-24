@@ -32,11 +32,21 @@ const CHROMIUM_ROOTS: Record<string, string> = {
     arc: "Arc",
 };
 
-function firstExisting(paths: string[]): string | null {
+/**
+ * The first path we can actually open, not merely the first that exists.
+ *
+ * Safari's cookie jar is the reason for the distinction: the file is right
+ * there, and reading it fails with EPERM unless the app has Full Disk Access.
+ * `existsSync` says yes, yt-dlp then dies with "Operation not permitted", and
+ * we are back to a failed download for want of an enhancement. Permission is
+ * part of the question.
+ */
+function firstReadable(paths: string[]): string | null {
     for (const p of paths) {
         try {
-            if (fs.existsSync(p)) return p;
-        } catch { /* unreadable is the same as absent for our purposes */ }
+            fs.accessSync(p, fs.constants.R_OK);
+            return p;
+        } catch { /* missing or not permitted — either way, not usable */ }
     }
     return null;
 }
@@ -76,7 +86,7 @@ export function findBrowserCookieStore(
     const appSupport = path.join(home, "Library", "Application Support");
 
     if (browser === "safari") {
-        return firstExisting([
+        return firstReadable([
             path.join(home, "Library", "Cookies", "Cookies.binarycookies"),
             path.join(home, "Library", "Containers", "com.apple.Safari", "Data",
                       "Library", "Cookies", "Cookies.binarycookies"),
@@ -91,15 +101,15 @@ export function findBrowserCookieStore(
         } catch {
             return null;
         }
-        return firstExisting(names.map((n) => path.join(profiles, n, "cookies.sqlite")));
+        return firstReadable(names.map((n) => path.join(profiles, n, "cookies.sqlite")));
     }
 
     const root = CHROMIUM_ROOTS[browser];
     if (!root) return null; // Unknown browser: let yt-dlp be the judge.
-    return firstExisting(chromiumCookieStores(path.join(appSupport, root)));
+    return firstReadable(chromiumCookieStores(path.join(appSupport, root)));
 }
 
-/** Whether we know for certain this browser has no cookies to read. */
+/** Whether we know for certain this browser has no cookies we can read. */
 export function browserHasNoCookies(browserSpec: string, home?: string): boolean {
     const browser = browserSpec.split(":")[0].trim().toLowerCase();
     // Only claim certainty for browsers whose layout we know.

@@ -85,6 +85,22 @@ describe("findBrowserCookieStore", () => {
     });
 });
 
+describe("unreadable stores", () => {
+    it("treats a store it cannot open as absent", () => {
+        // Safari's jar is TCC-protected: the file exists and reading it fails
+        // with EPERM unless the app has Full Disk Access. Existence alone
+        // would hand yt-dlp a flag that kills the download.
+        const store = make("Library", "Cookies", "Cookies.binarycookies");
+        fs.chmodSync(store, 0o000);
+        try {
+            expect(findBrowserCookieStore("safari", home)).toBeNull();
+            expect(browserHasNoCookies("safari", home)).toBe(true);
+        } finally {
+            fs.chmodSync(store, 0o600);
+        }
+    });
+});
+
 describe("browserHasNoCookies", () => {
     it("is true only when we know the layout and found nothing", () => {
         fs.mkdirSync(path.join(home, ...appSupport, "Google", "Chrome"), { recursive: true });
