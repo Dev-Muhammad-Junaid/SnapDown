@@ -3,6 +3,7 @@
 import React, { useEffect, useState, useMemo, useCallback } from "react";
 import { toast } from "sonner";
 import { api } from "@/lib/api";
+import { mergeQueue } from "@/lib/queue-merge";
 import type { QueueItem, DownloadProfile } from "@/types/media";
 
 /**
@@ -236,38 +237,7 @@ export function useDownloadQueue({ refreshLibrary }: { refreshLibrary: () => voi
                     }
                 }
 
-                setQueue(prev => {
-                    const localOnly = prev.filter(p => !p.jobId && (p.status === 'parsing' || p.status === 'pending'));
-                    if (activeJobs.length === 0) return localOnly;
-                    const prevById = new Map(prev.filter(p => p.jobId).map(p => [p.jobId as string, p]));
-                    const merged = activeJobs.map(job => {
-                        const existing = prevById.get(job.jobId as string);
-                        if (!existing) return job;
-                        return {
-                            ...existing,
-                            ...job,
-                            id: existing.id,
-                            thumbnail: existing.thumbnail || job.thumbnail,
-                            title: job.title || existing.title,
-                            sourcePlatform: existing.sourcePlatform || job.sourcePlatform,
-                            duration: existing.duration || job.duration,
-                            formats: existing.formats,
-                            selectedFormat: existing.selectedFormat,
-                            mediaType: existing.mediaType || job.mediaType,
-                            imageUrl: existing.imageUrl || job.imageUrl,
-                            matchedProfileName: existing.matchedProfileName || job.matchedProfileName,
-                            matchedFormatLabel: existing.matchedFormatLabel || job.matchedFormatLabel,
-                            downloadPath: job.downloadPath || existing.downloadPath,
-                            progress: (job.status === "downloading" || job.status === "processing" || job.status === "paused")
-                                ? Math.max(existing.progress || 0, job.progress || 0)
-                                : (job.progress ?? existing.progress),
-                            errorText: (job.status === "error" || job.status === "cancelled")
-                                ? (job.errorText || existing.errorText)
-                                : undefined,
-                        } satisfies QueueItem;
-                    });
-                    return [...localOnly, ...merged];
-                });
+                setQueue(prev => mergeQueue(prev, activeJobs));
 
                 activeJobs.forEach(q => {
                     if (q.status !== 'completed' && q.status !== 'error' && q.status !== 'cancelled' && q.jobId) {
