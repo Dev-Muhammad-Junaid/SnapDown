@@ -9,10 +9,59 @@ import { getYtdlpPath, describeYtdlpError, urlTargetsSingleVideo, playlistScopeA
 const execFileAsync = promisify(execFile);
 
 import { GALLERY_DL_PATH } from "@/lib/gallery-dl";
+import { prisma } from "@/lib/prisma";
+
+/**
+ * Records a link that failed before it could become a download.
+ *
+ * A download only reaches the history once it starts, and it can only start
+ * once this lookup has succeeded — so a link that fails here left no trace
+ * anywhere: not in the queue, which is client-side until a job exists, and not
+ * in the history, which had never heard of it. "Nothing in history or in
+ * queue, and it cleans itself from everywhere."
+ *
+ * The row is written with the URL as its title because a lookup that failed is
+ * precisely one where we never learned what the thing was called.
+ */
+async function recordFailedLookup(url: string, reason: string): Promise<void> {
+    try {
+        const now = new Date();
+        await prisma.downloadLog.create({
+            data: {
+                url,
+                title: url,
+                status: "error",
+                errorMessage: reason,
+                startedAt: now,
+                completedAt: now,
+            },
+        });
+    } catch (e) {
+        // Never let bookkeeping turn a failed lookup into a failed request.
+        console.error("[Preview] could not record failed lookup:", e);
+    }
+}
 
 export async function POST(req: Request) {
+    const body = await req.json().catch(() => ({} as { url?: unknown }));
+    const requestedUrl = typeof body?.url === "string" ? body.url : "";
+
+    const response = await handlePreview(requestedUrl);
+
+    // One place to catch every way this can fail. The handler below returns
+    // from half a dozen points, and logging at each of them is how one gets
+    // missed.
+    if (!response.ok && requestedUrl) {
+        const detail = await response.clone().json().catch(() => null);
+        await recordFailedLookup(requestedUrl, detail?.error || `Lookup failed (${response.status})`);
+    }
+
+    return response;
+}
+
+async function handlePreview(inputUrl: string) {
     try {
-        let { url } = await req.json();
+        let url = inputUrl;
 
         if (!url) {
             return NextResponse.json({ error: "URL is required" }, { status: 400 });
