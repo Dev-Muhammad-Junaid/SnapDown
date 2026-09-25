@@ -26,6 +26,7 @@
     "test:smoke": "node tests/smoke.mjs",
     "electron:dev": "concurrently -k -n NEXT,ELECTRON -c blue,magenta \"npm run dev\" \"wait-on http://localhost:3000 && electron .\"",
     "electron:build": "npm run build && npm run rebuild:electron && node scripts/sync-electron-sqlite-binary.cjs && node scripts/finalize-standalone.cjs && bash scripts/electron-build.sh",
+    "electron:build:local": "SNAPDOWN_SKIP_NOTARIZE=1 npm run electron:build",
     "postelectron:build": "npm run rebuild:node",
     "rebuild:electron": "electron-rebuild -f -w better-sqlite3",
     "rebuild:node": "npm rebuild better-sqlite3",

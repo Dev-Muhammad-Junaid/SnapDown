@@ -27,7 +27,25 @@ if [ -n "${APPLE_SIGN_IDENTITY:-}" ]; then
     echo "Signing as: ${SIGN_NAME}"
     ARGS+=(--config.mac.identity="${SIGN_NAME}")
 
-    if [ -n "${APPLE_API_KEY:-}" ] && [ -n "${APPLE_API_KEY_ID:-}" ] && [ -n "${APPLE_API_ISSUER:-}" ]; then
+    if [ -n "${SNAPDOWN_SKIP_NOTARIZE:-}" ]; then
+        # A local build, for running on this machine only.
+        #
+        # Notarization exists for files that arrive quarantined — downloaded.
+        # Nothing built here is, so Gatekeeper never consults the ticket and
+        # the round trip to Apple buys nothing but a few minutes' wait.
+        #
+        # Signing is NOT skipped with it, and that is the point of having this
+        # switch at all rather than unsetting the credentials by hand. macOS
+        # keys permissions to an app's designated requirement: a Developer ID
+        # build identifies itself by team and bundle id, so every rebuild is
+        # the same app and keeps its grants, while an unsigned one identifies
+        # itself by the hash of its own contents and is a brand new app on
+        # every build. Skipping signing would silently drop Full Disk Access
+        # each time and bring back the "could not find chrome cookies
+        # database" failure it took a while to explain.
+        echo "SNAPDOWN_SKIP_NOTARIZE set — signing but not notarizing."
+        echo "  (fine for running locally; NOT distributable — scripts/release.sh will stop and ask before publishing it)"
+    elif [ -n "${APPLE_API_KEY:-}" ] && [ -n "${APPLE_API_KEY_ID:-}" ] && [ -n "${APPLE_API_ISSUER:-}" ]; then
         if [ ! -f "${APPLE_API_KEY}" ]; then
             echo "error: APPLE_API_KEY points at ${APPLE_API_KEY}, which does not exist" >&2
             exit 1
@@ -61,7 +79,7 @@ electron-builder "${ARGS[@]}"
 # Verified after 0.5.1 built clean and the .dmg came out `rejected — no usable
 # signature` while the .app inside it came out `accepted — Notarized Developer
 # ID`.
-if [ -n "${APPLE_SIGN_IDENTITY:-}" ] && [ -n "${APPLE_API_KEY:-}" ]; then
+if [ -z "${SNAPDOWN_SKIP_NOTARIZE:-}" ] && [ -n "${APPLE_SIGN_IDENTITY:-}" ] && [ -n "${APPLE_API_KEY:-}" ]; then
     VERSION="$(node -p "require('./package.json').version")"
     DMG="dist/SnapDown-${VERSION}-arm64.dmg"
 
